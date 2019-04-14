@@ -15,4 +15,4 @@ module load nccl/2.4/2.4.2-1
 
 source ~/ds/bin/activate
 
-python main.py train
+python -u main.py train > log.txt
