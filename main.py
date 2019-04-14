@@ -130,7 +130,7 @@ def run_train(args):
             predicted, _ = parser.parse(sentence)
             dev_predicted.append(predicted.convert())
 
-        dev_fscore = evaluate.evalb(args.evalb_dir, dev_treebank, dev_predicted)
+        dev_fscore = evaluate.evalb(dev_treebank, dev_predicted)
 
         print(
             "dev-fscore {} "
@@ -142,7 +142,7 @@ def run_train(args):
             )
         )
 
-        if dev_fscore.fscore > best_dev_fscore:
+        if dev_fscore.fscore() > best_dev_fscore:
             if best_dev_model_path is not None:
                 for ext in [".data", ".meta"]:
                     path = best_dev_model_path + ext
@@ -150,9 +150,9 @@ def run_train(args):
                         print("Removing previous model file {}...".format(path))
                         os.remove(path)
 
-            best_dev_fscore = dev_fscore.fscore
+            best_dev_fscore = dev_fscore.fscore()
             best_dev_model_path = "{}_dev={:.2f}".format(
-                args.model_path_base, dev_fscore.fscore)
+                args.model_path_base, dev_fscore.fscore())
             print("Saving new best model to {}...".format(best_dev_model_path))
             dy.save(best_dev_model_path, [parser])
 
@@ -222,7 +222,7 @@ def run_test(args):
         predicted, _ = parser.parse(sentence)
         test_predicted.append(predicted.convert())
 
-    test_fscore = evaluate.evalb(args.evalb_dir, test_treebank, test_predicted)
+    test_fscore = evaluate.evalb(test_treebank, test_predicted)
 
     print(
         "test-fscore {} "
@@ -262,8 +262,8 @@ def main():
     subparser.add_argument("--explore", action="store_true")
     subparser.add_argument("--model-path-base", required=True)
     subparser.add_argument("--evalb-dir", default="EVALB/")
-    subparser.add_argument("--train-path", default="data/02-21.10way.clean")
-    subparser.add_argument("--dev-path", default="data/22.auto.clean")
+    subparser.add_argument("--train-path", default="corpora/WSJ-PTB/02-21.10way.clean.train")
+    subparser.add_argument("--dev-path", default="corpora/WSJ-PTB/22.auto.clean.dev")
     subparser.add_argument("--batch-size", type=int, default=10)
     subparser.add_argument("--epochs", type=int)
     subparser.add_argument("--checks-per-epoch", type=int, default=4)
@@ -275,7 +275,7 @@ def main():
         subparser.add_argument(arg)
     subparser.add_argument("--model-path-base", required=True)
     subparser.add_argument("--evalb-dir", default="EVALB/")
-    subparser.add_argument("--test-path", default="data/23.auto.clean")
+    subparser.add_argument("--test-path", default="corpora/WSJ-PTB/23.auto.clean.test")
 
     args = parser.parse_args()
     args.callback(args)
