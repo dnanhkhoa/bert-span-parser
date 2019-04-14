@@ -99,7 +99,7 @@ class TopDownParser(object):
     def from_spec(cls, spec, model):
         return cls(model, **spec)
 
-    def parse(self, sentence, gold=None, explore=True):
+    def parse(self, sentence, word_embeddings, gold=None, explore=True):
         is_train = gold is not None
 
         if is_train:
@@ -108,13 +108,17 @@ class TopDownParser(object):
             self.lstm.disable_dropout()
 
         embeddings = []
-        for tag, word in [(START, START)] + sentence + [(STOP, STOP)]:
+        for idx, (tag, word) in enumerate([(START, START)] + sentence + [(STOP, STOP)]):
             tag_embedding = self.tag_embeddings[self.tag_vocab.index(tag)]
-            if word not in (START, STOP):
-                count = self.word_vocab.count(word)
-                if not count or (is_train and np.random.rand() < 1 / (1 + count)):
-                    word = UNK
-            word_embedding = self.word_embeddings[self.word_vocab.index(word)]
+            # if word not in (START, STOP):
+            #     count = self.word_vocab.count(word)
+            #     if not count or (is_train and np.random.rand() < 1 / (1 + count)):
+            #         word = UNK
+
+            if word in (START, STOP):
+                word_embedding = self.word_embeddings[self.word_vocab.index(word)]
+            else:
+                word_embedding = dy.inputTensor(word_embeddings[idx - 1])
             embeddings.append(dy.concatenate([tag_embedding, word_embedding]))
 
         lstm_outputs = self.lstm.transduce(embeddings)
@@ -256,7 +260,7 @@ class ChartParser(object):
     def from_spec(cls, spec, model):
         return cls(model, **spec)
 
-    def parse(self, sentence, gold=None):
+    def parse(self, sentence, word_embeddings, gold=None):
         is_train = gold is not None
 
         if is_train:
@@ -265,13 +269,17 @@ class ChartParser(object):
             self.lstm.disable_dropout()
 
         embeddings = []
-        for tag, word in [(START, START)] + sentence + [(STOP, STOP)]:
+        for idx, (tag, word) in enumerate([(START, START)] + sentence + [(STOP, STOP)]):
             tag_embedding = self.tag_embeddings[self.tag_vocab.index(tag)]
-            if word not in (START, STOP):
-                count = self.word_vocab.count(word)
-                if not count or (is_train and np.random.rand() < 1 / (1 + count)):
-                    word = UNK
-            word_embedding = self.word_embeddings[self.word_vocab.index(word)]
+            # if word not in (START, STOP):
+            #     count = self.word_vocab.count(word)
+            #     if not count or (is_train and np.random.rand() < 1 / (1 + count)):
+            #         word = UNK
+
+            if word in (START, STOP):
+                word_embedding = self.word_embeddings[self.word_vocab.index(word)]
+            else:
+                word_embedding = dy.inputTensor(word_embeddings[idx - 1])
             embeddings.append(dy.concatenate([tag_embedding, word_embedding]))
 
         lstm_outputs = self.lstm.transduce(embeddings)

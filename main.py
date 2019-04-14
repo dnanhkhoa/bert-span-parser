@@ -2,6 +2,10 @@ import argparse
 import itertools
 import os.path
 import time
+import re
+
+import dynet_config
+dynet_config.set_gpu()
 
 import dynet as dy
 import numpy as np
@@ -10,6 +14,112 @@ import evaluate
 import parse
 import trees
 import vocabulary
+
+# For BERT
+import torch
+from bert.tokenization import BertTokenizer
+from bert.modeling import BertModel
+
+
+def prepare_tensors(sentences, tokenizer, seq_length):
+    """Loads a data file into a list of `InputFeatures`."""
+
+    features = []
+    for sentence in sentences:
+        tokens = []
+        input_subword_mask = []
+
+        for phrase_idx, phrase in enumerate(sentence):
+            for token in re.split(r"(?<=[^\W_])_(?=[^\W_])", phrase, flags=re.UNICODE):
+                subwords = tokenizer.tokenize(token)
+                for subword in subwords:
+                    tokens.append(subword)
+                    input_subword_mask.append(phrase_idx)
+
+        # Account for [CLS] and [SEP] with "- 2"
+        if len(tokens) > seq_length - 2:
+            tokens = tokens[0 : (seq_length - 2)]
+            input_subword_mask = input_subword_mask[0 : (seq_length - 2)]
+
+        # The convention in BERT is:
+        # (a) For sequence pairs:
+        #  tokens:   [CLS] is this jack ##son ##ville ? [SEP] no it is not . [SEP]
+        #  type_ids:   0   0  0    0    0     0      0   0    1  1  1   1  1   1
+        # (b) For single sequences:
+        #  tokens:   [CLS] the dog is hairy . [SEP]
+        #  type_ids:   0   0   0   0  0     0   0
+        #
+        # Where "type_ids" are used to indicate whether this is the first
+        # sequence or the second sequence. The embedding vectors for `type=0` and
+        # `type=1` were learned during pre-training and are added to the wordpiece
+        # embedding vector (and position vector). This is not *strictly* necessary
+        # since the [SEP] token unambigiously separates the sequences, but it makes
+        # it easier for the model to learn the concept of sequences.
+        #
+        # For classification tasks, the first vector (corresponding to [CLS]) is
+        # used as as the "sentence vector". Note that this only makes sense because
+        # the entire model is fine-tuned.
+
+        tokens.insert(0, "[CLS]")
+        input_subword_mask.insert(0, -1)
+        tokens.append("[SEP]")
+        input_subword_mask.append(-1)
+
+        input_ids = tokenizer.convert_tokens_to_ids(tokens)
+
+        # The mask has 1 for real tokens and 0 for padding tokens. Only real
+        # tokens are attended to.
+        input_mask = [1] * len(input_ids)
+
+        # Zero-pad up to the sequence length.
+        while len(input_ids) < seq_length:
+            input_ids.append(0)
+            input_mask.append(0)
+            input_subword_mask.append(-1)
+
+        assert len(input_ids) == seq_length
+        assert len(input_mask) == seq_length
+        assert len(input_subword_mask) == seq_length
+
+        features.append({
+            "input_ids": input_ids,
+            "input_mask": input_mask,
+            "input_subword_mask": input_subword_mask
+        })
+
+    all_input_ids = torch.tensor([f["input_ids"] for f in features], dtype=torch.long)
+    all_input_mask = torch.tensor([f["input_mask"] for f in features], dtype=torch.long)
+    all_input_subword_mask = [f["input_subword_mask"] for f in features]
+
+    return all_input_ids, all_input_mask, all_input_subword_mask
+
+
+def get_embeddings(sentences, model, tokenizer, device, seq_length=256):
+    all_input_ids, all_input_mask, all_input_subword_mask = prepare_tensors(sentences, tokenizer, seq_length)
+    all_input_ids = all_input_ids.to(device)
+    all_input_mask = all_input_mask.to(device)
+
+    subword_embeddings, _ = model(
+        all_input_ids,
+        token_type_ids=None,
+        attention_mask=all_input_mask,
+        output_all_encoded_layers=False,
+    )
+    subword_embeddings = subword_embeddings.detach().cpu().numpy()
+
+    embeddings = []
+    for sentence_index, subword_embedding in enumerate(subword_embeddings):
+        input_subword_mask = np.asarray(all_input_subword_mask[sentence_index])
+
+        # Create word embedding by averaging its subword embeddings
+        word_embeddings = []
+        for pos in range(input_subword_mask.max() + 1):
+            word_embeddings.append(np.mean(subword_embedding[input_subword_mask == pos], axis=0))
+
+        embeddings.append(word_embeddings)
+
+    return embeddings
+
 
 def format_elapsed(start_time):
     elapsed_time = int(time.time() - start_time)
@@ -21,10 +131,19 @@ def format_elapsed(start_time):
         elapsed_string = "{}d{}".format(days, elapsed_string)
     return elapsed_string
 
+
 def run_train(args):
     if args.numpy_seed is not None:
         print("Setting numpy random seed to {}...".format(args.numpy_seed))
         np.random.seed(args.numpy_seed)
+
+    print("Loading BERT model...")
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    tokenizer = BertTokenizer.from_pretrained("models/bert-base-multilingual-cased/vocab", do_lower_case=False)
+
+    bert_model = BertModel.from_pretrained("models/bert-base-multilingual-cased")
+    bert_model.to(device)
+    bert_model.eval()  # Use BERT as feature extractor
 
     print("Loading training trees from {}...".format(args.train_path))
     train_treebank = trees.load_trees(args.train_path)
@@ -127,7 +246,9 @@ def run_train(args):
         for tree in dev_treebank:
             dy.renew_cg()
             sentence = [(leaf.tag, leaf.word) for leaf in tree.leaves()]
-            predicted, _ = parser.parse(sentence)
+            words = [leaf.word for leaf in tree.leaves()]
+            word_embeddings = get_embeddings([words], bert_model, tokenizer, device)[0]
+            predicted, _ = parser.parse(sentence, word_embeddings)
             dev_predicted.append(predicted.convert())
 
         dev_fscore = evaluate.evalb(dev_treebank, dev_predicted)
@@ -168,10 +289,12 @@ def run_train(args):
             batch_losses = []
             for tree in train_parse[start_index:start_index + args.batch_size]:
                 sentence = [(leaf.tag, leaf.word) for leaf in tree.leaves()]
+                words = [leaf.word for leaf in tree.leaves()]
+                word_embeddings = get_embeddings([words], bert_model, tokenizer, device)[0]
                 if args.parser_type == "top-down":
-                    _, loss = parser.parse(sentence, tree, args.explore)
+                    _, loss = parser.parse(sentence, word_embeddings, tree, args.explore)
                 else:
-                    _, loss = parser.parse(sentence, tree)
+                    _, loss = parser.parse(sentence, word_embeddings, tree)
                 batch_losses.append(loss)
                 total_processed += 1
                 current_processed += 1
@@ -202,7 +325,16 @@ def run_train(args):
                 current_processed -= check_every
                 check_dev()
 
+
 def run_test(args):
+    print("Loading BERT model...")
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    tokenizer = BertTokenizer.from_pretrained("models/bert-base-multilingual-cased/vocab", do_lower_case=False)
+
+    bert_model = BertModel.from_pretrained("models/bert-base-multilingual-cased")
+    bert_model.to(device)
+    bert_model.eval()  # Use BERT as feature extractor
+
     print("Loading test trees from {}...".format(args.test_path))
     test_treebank = trees.load_trees(args.test_path)
     print("Loaded {:,} test examples.".format(len(test_treebank)))
@@ -219,7 +351,9 @@ def run_test(args):
     for tree in test_treebank:
         dy.renew_cg()
         sentence = [(leaf.tag, leaf.word) for leaf in tree.leaves()]
-        predicted, _ = parser.parse(sentence)
+        words = [leaf.word for leaf in tree.leaves()]
+        word_embeddings = get_embeddings([words], bert_model, tokenizer, device)[0]
+        predicted, _ = parser.parse(sentence, word_embeddings)
         test_predicted.append(predicted.convert())
 
     test_fscore = evaluate.evalb(test_treebank, test_predicted)
@@ -231,6 +365,7 @@ def run_test(args):
             format_elapsed(start_time),
         )
     )
+
 
 def main():
     dynet_args = [
@@ -251,16 +386,16 @@ def main():
     for arg in dynet_args:
         subparser.add_argument(arg)
     subparser.add_argument("--numpy-seed", type=int)
-    subparser.add_argument("--parser-type", choices=["top-down", "chart"], required=True)
+    subparser.add_argument("--parser-type", choices=["top-down", "chart"], default="chart")
     subparser.add_argument("--tag-embedding-dim", type=int, default=50)
-    subparser.add_argument("--word-embedding-dim", type=int, default=100)
+    subparser.add_argument("--word-embedding-dim", type=int, default=768)  # default=100
     subparser.add_argument("--lstm-layers", type=int, default=2)
     subparser.add_argument("--lstm-dim", type=int, default=250)
     subparser.add_argument("--label-hidden-dim", type=int, default=250)
     subparser.add_argument("--split-hidden-dim", type=int, default=250)
     subparser.add_argument("--dropout", type=float, default=0.4)
     subparser.add_argument("--explore", action="store_true")
-    subparser.add_argument("--model-path-base", required=True)
+    subparser.add_argument("--model-path-base", default="outputs")
     subparser.add_argument("--evalb-dir", default="EVALB/")
     subparser.add_argument("--train-path", default="corpora/WSJ-PTB/02-21.10way.clean.train")
     subparser.add_argument("--dev-path", default="corpora/WSJ-PTB/22.auto.clean.dev")
@@ -279,6 +414,7 @@ def main():
 
     args = parser.parse_args()
     args.callback(args)
+
 
 if __name__ == "__main__":
     main()
