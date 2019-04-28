@@ -1,3 +1,5 @@
+# This code is adapted from https://github.com/nikitakit/self-attentive-parser
+
 import numpy as np
 cimport numpy as np
 from numpy cimport ndarray
