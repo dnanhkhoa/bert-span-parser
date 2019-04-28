@@ -1,1 +1,7 @@
-allennlp
+cython
+numpy
+torch
+tqdm
+boto3
+requests
+regex
