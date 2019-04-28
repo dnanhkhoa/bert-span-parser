@@ -6,7 +6,7 @@ import time
 import dynet as dy
 import numpy as np
 
-import evaluate
+import eval
 import parse
 import trees
 import vocabulary
@@ -130,7 +130,7 @@ def run_train(args):
             predicted, _ = parser.parse(sentence)
             dev_predicted.append(predicted.convert())
 
-        dev_fscore = evaluate.evalb(dev_treebank, dev_predicted)
+        dev_fscore = eval.evalb(dev_treebank, dev_predicted)
 
         print(
             "dev-fscore {} "
@@ -222,7 +222,7 @@ def run_test(args):
         predicted, _ = parser.parse(sentence)
         test_predicted.append(predicted.convert())
 
-    test_fscore = evaluate.evalb(test_treebank, test_predicted)
+    test_fscore = eval.evalb(test_treebank, test_predicted)
 
     print(
         "test-fscore {} "
