@@ -1,7 +1,9 @@
 import collections.abc
 
+
 class TreebankNode(object):
     pass
+
 
 class InternalTreebankNode(TreebankNode):
     def __init__(self, label, children):
@@ -15,18 +17,20 @@ class InternalTreebankNode(TreebankNode):
 
     def linearize(self):
         return "({} {})".format(
-            self.label, " ".join(child.linearize() for child in self.children))
+            self.label, " ".join(child.linearize() for child in self.children)
+        )
 
     def leaves(self):
         for child in self.children:
             yield from child.leaves()
 
-    def convert(self, index=0):
+    def convert(self, index=0, nocache=False):
         tree = self
         sublabels = [self.label]
 
         while len(tree.children) == 1 and isinstance(
-                tree.children[0], InternalTreebankNode):
+            tree.children[0], InternalTreebankNode
+        ):
             tree = tree.children[0]
             sublabels.append(tree.label)
 
@@ -35,7 +39,8 @@ class InternalTreebankNode(TreebankNode):
             children.append(child.convert(index=index))
             index = children[-1].right
 
-        return InternalParseNode(tuple(sublabels), children)
+        return InternalParseNode(tuple(sublabels), children, nocache=nocache)
+
 
 class LeafTreebankNode(TreebankNode):
     def __init__(self, tag, word):
@@ -54,11 +59,13 @@ class LeafTreebankNode(TreebankNode):
     def convert(self, index=0):
         return LeafParseNode(index, self.tag, self.word)
 
+
 class ParseNode(object):
     pass
 
+
 class InternalParseNode(ParseNode):
-    def __init__(self, label, children):
+    def __init__(self, label, children, nocache=False):
         assert isinstance(label, tuple)
         assert all(isinstance(sublabel, str) for sublabel in label)
         assert label
@@ -69,12 +76,14 @@ class InternalParseNode(ParseNode):
         assert children
         assert len(children) > 1 or isinstance(children[0], LeafParseNode)
         assert all(
-            left.right == right.left
-            for left, right in zip(children, children[1:]))
+            left.right == right.left for left, right in zip(children, children[1:])
+        )
         self.children = tuple(children)
 
         self.left = children[0].left
         self.right = children[-1].right
+
+        self.nocache = nocache
 
     def leaves(self):
         for child in self.children:
@@ -109,6 +118,7 @@ class InternalParseNode(ParseNode):
             if left < child.left < right
         ]
 
+
 class LeafParseNode(ParseNode):
     def __init__(self, index, tag, word):
         assert isinstance(index, int)
@@ -127,6 +137,7 @@ class LeafParseNode(ParseNode):
 
     def convert(self):
         return LeafTreebankNode(self.tag, self.word)
+
 
 def load_trees(path, strip_top=True):
     with open(path) as infile:
@@ -164,7 +175,7 @@ def load_trees(path, strip_top=True):
 
     if strip_top:
         for i, tree in enumerate(trees):
-            if tree.label == "TOP":
+            if tree.label in ("TOP", "ROOT"):
                 assert len(tree.children) == 1
                 trees[i] = tree.children[0]
 

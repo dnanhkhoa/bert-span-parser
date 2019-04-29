@@ -1,3 +1,5 @@
+# This code is adapted from https://github.com/junekihong/beam-span-parser
+
 import math
 from collections import defaultdict
 
@@ -17,12 +19,10 @@ def evalb(gold_trees, predicted_trees):
 
 
 class FScore(object):
-
     def __init__(self, correct=0, predcount=0, goldcount=0):
-        self.correct = correct        # correct brackets
-        self.predcount = predcount    # total predicted brackets
-        self.goldcount = goldcount    # total gold brackets
-
+        self.correct = correct  # correct brackets
+        self.predcount = predcount  # total predicted brackets
+        self.goldcount = goldcount  # total gold brackets
 
     def precision(self):
         if self.predcount > 0:
@@ -30,13 +30,11 @@ class FScore(object):
         else:
             return 0.0
 
-
     def recall(self):
         if self.goldcount > 0:
             return (100.0 * self.correct) / self.goldcount
         else:
             return 0.0
-
 
     def fscore(self):
         precision = self.precision()
@@ -46,11 +44,10 @@ class FScore(object):
         else:
             return 0.0
 
-
     def __str__(self):
         return "(Recall={:.2f}, Precision={:.2f}, FScore={:.2f})".format(
-            self.recall(), self.precision(), self.fscore())
-
+            self.recall(), self.precision(), self.fscore()
+        )
 
     def __iadd__(self, other):
         self.correct += other.correct
@@ -59,131 +56,38 @@ class FScore(object):
         return self
 
 
-    def __add__(self, other):
-        return Fmeasure(self.correct + other.correct,
-                        self.predcount + other.predcount,
-                        self.goldcount + other.goldcount)
-
-
-    def __cmp__(self, other):
-        return cmp(self.fscore(), other.fscore())
-
-
-    @staticmethod
-    def parseval(gold_file, test_file):
-        gold_trees = PhraseTree.load_treefile(gold_file)
-        test_trees = PhraseTree.load_treefile(test_file)
-        cumulative = FScore()
-
-        for gold, test in zip(gold_trees, test_trees):
-            acc = test.compare(gold, advp_prt=True)
-            cumulative += acc
-
-        return cumulative
-
-
-
 class PhraseTree(object):
 
-    puncs = [",", ".", ":", "``", "''", "PU"] ## (COLLINS.prm)
+    puncs = [",", ".", ":", "``", "''", "PU"]  ## (COLLINS.prm)
 
-
-    def __init__(
-        self,
-        symbol=None,
-        children=[],
-        sentence=[],
-        leaf=None,
-    ):
-        self.symbol = symbol        # label at top node
-        self.children = children    # list of PhraseTree objects
+    def __init__(self, symbol=None, children=[], sentence=[], leaf=None):
+        self.symbol = symbol  # label at top node
+        self.children = children  # list of PhraseTree objects
         self.sentence = sentence
-        self.leaf = leaf            # word at bottom level else None
+        self.leaf = leaf  # word at bottom level else None
 
         self._str = None
 
-
     def __str__(self):
         if True or self._str is None:
-            children = [child for child in self.children if (len(child.children) > 0 or child.leaf is not None)]
+            children = [
+                child
+                for child in self.children
+                if (len(child.children) > 0 or child.leaf is not None)
+            ]
 
             if len(children) != 0:
-                childstr = ' '.join(str(c) for c in children)
-                self._str = '({} {})'.format(self.symbol, childstr)
+                childstr = " ".join(str(c) for c in children)
+                self._str = "({} {})".format(self.symbol, childstr)
             elif self.leaf is not None:
-                self._str = '({} {})'.format(
-                    #self.sentence[self.leaf][1],
+                self._str = "({} {})".format(
+                    # self.sentence[self.leaf][1],
                     self.symbol,
                     self.sentence[self.leaf][0],
                 )
             else:
                 self._str = ""
         return self._str
-
-
-    def copy(self, set_parents=False, set_child_indices=False):
-        result = PhraseTree(self.symbol,
-                            children=[],
-                            sentence=self.sentence,
-                            leaf=self.leaf)
-        if set_parents:
-            result.parent = None
-        if set_child_indices:
-            result.child_index = self.child_index
-
-        for child in self.children:
-            child_copy = child.copy(set_parents, set_child_indices)
-            if set_parents:
-                child_copy.parent = result
-            if set_child_indices:
-                child_copy.child_index = self.child_index
-            result.children.append(child_copy)
-        return result
-
-
-    def leaves(self):
-        result = []
-        queue = [self]
-        while queue:
-            node = queue.pop()
-            if len(node.children) == 0:
-                result.append(node)
-            for child in node.children:
-                queue.append(child)
-        return result
-
-
-    def propagate_sentence(self, sentence, prune=False):
-        """
-        Recursively assigns sentence (list of (word, POS) pairs)
-            to all nodes of a tree.
-        If prune is set to True, then it will also remove all ungrounded leaf nodes
-            that do not point to a word in the sentence.
-        """
-        self.sentence = sentence
-        for child in self.children:
-            child.propagate_sentence(sentence, prune)
-        if prune:
-            self.children = [child for child in self.children if child.leaf is not None or len(child.children) > 0]
-
-
-    def pretty(self, level=0, marker='  '):
-        pad = marker * level
-
-        if self.leaf is not None:
-            leaf_string = '({} {})'.format(
-                    self.symbol,
-                    self.sentence[self.leaf][0],
-            )
-            return pad + leaf_string
-
-        else:
-            result = pad + '(' + self.symbol
-            for child in self.children:
-                result += '\n' + child.pretty(level + 1)
-            result += ')'
-            return result
-
 
     @staticmethod
     def parse(line):
@@ -194,37 +98,35 @@ class PhraseTree(object):
         sentence = []
         _, t = PhraseTree._parse(line, 0, sentence)
 
-        #if t.symbol == 'TOP' and len(t.children) == 1:
+        # if t.symbol == 'TOP' and len(t.children) == 1:
         #    t = t.children[0]
 
         return t
-
 
     @staticmethod
     def _parse(line, index, sentence):
         "((...) (...) w/t (...)). returns pos and tree, and carries sent out."
 
-        assert line[index] == '(', "Invalid tree string {} at {}".format(line, index)
+        assert line[index] == "(", "Invalid tree string {} at {}".format(line, index)
         index += 1
         symbol = None
         children = []
         leaf = None
-        while line[index] != ')':
-            if line[index] == '(':
+        while line[index] != ")":
+            if line[index] == "(":
                 index, t = PhraseTree._parse(line, index, sentence)
                 children.append(t)
-
             else:
                 if symbol is None:
                     # symbol is here!
-                    rpos = min(line.find(' ', index), line.find(')', index))
+                    rpos = min(line.find(" ", index), line.find(")", index))
                     # see above N.B. (find could return -1)
 
-                    symbol = line[index:rpos] # (word, tag) string pair
+                    symbol = line[index:rpos]  # (word, tag) string pair
 
                     index = rpos
                 else:
-                    rpos = line.find(')', index)
+                    rpos = line.find(")", index)
                     word = line[index:rpos]
                     sentence.append((word, symbol))
                     leaf = len(sentence) - 1
@@ -233,17 +135,11 @@ class PhraseTree(object):
             if line[index] == " ":
                 index += 1
 
-        assert line[index] == ')', "Invalid tree string %s at %d" % (line, index)
+        assert line[index] == ")", "Invalid tree string %s at %d" % (line, index)
 
-        t = PhraseTree(
-            symbol=symbol,
-            children=children,
-            sentence=sentence,
-            leaf=leaf,
-        )
+        t = PhraseTree(symbol=symbol, children=children, sentence=sentence, leaf=leaf)
 
         return (index + 1), t
-
 
     def left_span(self):
         try:
@@ -255,7 +151,6 @@ class PhraseTree(object):
                 self._left_span = self.children[0].left_span()
             return self._left_span
 
-
     def right_span(self):
         try:
             return self._right_span
@@ -266,7 +161,6 @@ class PhraseTree(object):
                 self._right_span = self.children[-1].right_span()
             return self._right_span
 
-
     def brackets(self, advp_prt=True, counts=None):
 
         if counts is None:
@@ -276,87 +170,25 @@ class PhraseTree(object):
             return {}
 
         nonterm = self.symbol
-        if advp_prt and nonterm=='PRT':
-            nonterm = 'ADVP'
+        if advp_prt and nonterm == "PRT":
+            nonterm = "ADVP"
 
         left = self.left_span()
         right = self.right_span()
 
         # ignore punctuation
-        while (
-            left < len(self.sentence) and
-            self.sentence[left][1] in PhraseTree.puncs
-        ):
+        while left < len(self.sentence) and self.sentence[left][1] in PhraseTree.puncs:
             left += 1
-        while (
-            right > 0 and self.sentence[right][1] in PhraseTree.puncs
-        ):
+        while right > 0 and self.sentence[right][1] in PhraseTree.puncs:
             right -= 1
 
-        if left <= right and nonterm != 'TOP':
+        if left <= right and nonterm != "TOP":
             counts[(nonterm, left, right)] += 1
 
         for child in self.children:
             child.brackets(advp_prt=advp_prt, counts=counts)
 
         return counts
-
-
-    def phrase(self):
-        if self.leaf is not None:
-            return [(self.leaf, self.symbol)]
-        else:
-            result = []
-            for child in self.children:
-                result.extend(child.phrase())
-            return result
-
-
-    @staticmethod
-    def load_treefile(fname, binarize_flag=False, truncate_flag=False):
-        trees = []
-
-        prefix_dict = None
-        if binarize_flag:
-            #populate the prefix_dict
-            prefix_dict = defaultdict(lambda: defaultdict(set))
-            for line in open(fname):
-                t = PhraseTree.parse(line)
-                queue = [t]
-                while queue:
-                    node = queue.pop()
-                    head = node.symbol
-
-                    if len(node.children) > 1:
-                        lhs = node.children[0].symbol
-                        rhs = tuple([child.symbol for child in node.children[1:]])
-                        prefix_dict[head][lhs].add(rhs)
-
-                        if len(rhs) > 1:
-                            if "'" not in node.symbol:
-                                head = node.symbol + "'"
-                            lhs = rhs[0]
-                            rhs = rhs[1:]
-                            prefix_dict[head][lhs].add(rhs)
-
-                    for child in node.children:
-                        queue.append(child)
-            for head in prefix_dict:
-                prefix_dict[head] = {lhs:prefix_dict[head][lhs] for lhs in prefix_dict[head] if len(prefix_dict[head][lhs]) > 1}
-            prefix_dict = {head:prefix_dict[head] for head in prefix_dict if prefix_dict[head]}
-
-        for line in open(fname):
-            t = PhraseTree.parse(line)
-            if t.symbol == "TOP":
-                t = t.children[0]
-
-            if truncate_flag:
-                t = truncate(t)
-            if binarize_flag:
-                t = binarize(t, prefix_dict)
-            trees.append(t)
-        return trees
-
 
     def compare(self, gold, advp_prt=True):
         """
@@ -374,53 +206,3 @@ class PhraseTree(object):
         gold_total = sum(goldbracks.values())
 
         return FScore(correct, pred_total, gold_total)
-
-
-    def enclosing(self, i, j):
-        """
-        Returns the left and right indices of the labeled span in the tree
-            which is next-larger than (i, j)
-            (whether or not (i, j) is itself a labeled span)
-        """
-        for child in self.children:
-            left = child.left_span()
-            right = child.right_span()
-            if (left <= i) and (right >= j):
-                if (left == i) and (right == j):
-                    break
-                return child.enclosing(i, j)
-
-        return (self.left_span(), self.right_span())
-
-
-    def enclosing_subtree(self, i, j):
-        for child in self.children:
-            left = child.left_span()
-            right = child.right_span()
-            if (left <= i) and (right >= j):
-                if (left == i) and (right == j):
-                    break
-                return child.enclosing_subtree(i, j)
-        return self
-
-
-    def span_labels(self, i, j):
-        """
-        Returns a list of span labels (if any) for (i, j)
-        """
-        if self.leaf is not None:
-            return []
-
-        if (self.left_span() == i) and (self.right_span() == j):
-            result = [self.symbol]
-        else:
-            result = []
-
-        for child in self.children:
-            left = child.left_span()
-            right = child.right_span()
-            if (left <= i) and (right >= j):
-                result.extend(child.span_labels(i, j))
-                break
-
-        return result
