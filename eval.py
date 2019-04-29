@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 # This code is adapted from https://github.com/junekihong/beam-span-parser
 
 import math

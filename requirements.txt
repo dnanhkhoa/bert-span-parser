@@ -3,3 +3,4 @@ tqdm
 boto3
 requests
 regex
+click
