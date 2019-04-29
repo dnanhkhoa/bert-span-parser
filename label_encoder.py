@@ -37,3 +37,7 @@ class LabelEncoder(object):
     def inverse_transform(self, _id):
         assert self.__indices, "This {} instance is not fitted yet.".format(__name__)
         return self.__values.get(_id, self.__unk_label)
+
+    @property
+    def size(self):
+        return len(self.__values) if self.__values else 0
