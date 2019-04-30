@@ -3,6 +3,7 @@ import os
 import random
 
 import click
+import neptune
 import torch
 
 # from apex import amp
@@ -88,6 +89,24 @@ def create_data_loader(sentences, batch_size, max_seq_length, tokenizer, is_eval
     dataloader = DataLoader(dataset, sampler=sampler, batch_size=batch_size)
 
     return dataloader, all_sections
+
+
+def prepare_batch_input(
+    indices, ids, attention_masks, sections, trees, sentences, device
+):
+    _ids = ids.to(device)
+    _attention_masks = attention_masks.to(device)
+
+    _sections = []
+    _trees = []
+    _sentences = []
+
+    for _id in indices:
+        _sections.append(sections[_id])
+        _trees.append(trees[_id])
+        _sentences.append(sentences[_id])
+
+    return _ids, _attention_masks, _sections, _trees, _sentences
 
 
 def eval():
