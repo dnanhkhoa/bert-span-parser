@@ -7,10 +7,13 @@ import torch
 
 # from apex import amp
 from loguru import logger
+from torch.utils.data import DataLoader, RandomSampler, SequentialSampler, TensorDataset
 from tqdm import tqdm, trange
 
+from bert.tokenization import BertTokenizer
 from eval import evalb
 from label_encoder import LabelEncoder
+from model import ChartParser
 from trees import load_trees
 
 TAG_UNK = "UNK"
@@ -35,6 +38,56 @@ BERT_TOKEN_MAPPING = {
     "‹": "'",
     "›": "'",
 }
+
+
+def create_data_loader(sentences, batch_size, max_seq_length, tokenizer, is_eval):
+    features = []
+    for sentence in sentences:
+        tokens = []
+        sections = []
+        for token in sentence:
+            subtokens = tokenizer.tokenize(BERT_TOKEN_MAPPING.get(token, token))
+            tokens.extend(subtokens)
+            sections.append(len(subtokens))
+
+        num_tokens = len(tokens)
+
+        # Account for [CLS] and [SEP] tokens
+        if num_tokens > max_seq_length - 2:
+            num_tokens = max_seq_length - 2
+            tokens = tokens[:num_tokens]
+            logger.warning("Too long sentence: {}", sentence)
+
+        ids = tokenizer.convert_tokens_to_ids(["[CLS]"] + tokens + ["[SEP]"])
+        attention_mask = [1] * len(ids)
+
+        # Zero-pad up to the maximum sequence length
+        padding_size = max_seq_length - len(ids)
+
+        ids += [0] * padding_size
+        attention_mask += [0] * padding_size
+
+        assert len(ids) == max_seq_length
+        assert len(attention_mask) == max_seq_length
+
+        features.append(
+            {"ids": ids, "attention_mask": attention_mask, "sections": sections}
+        )
+
+    all_indices = torch.arange(len(features), dtype=torch.long)
+    all_ids = torch.tensor([feature["ids"] for feature in features], dtype=torch.long)
+    all_attention_masks = torch.tensor(
+        [feature["attention_mask"] for feature in features], dtype=torch.long
+    )
+    all_sections = [feature["sections"] for feature in features]
+
+    dataset = TensorDataset(all_indices, all_ids, all_attention_masks)
+
+    sampler = SequentialSampler(dataset) if is_eval else RandomSampler(dataset)
+
+    dataloader = DataLoader(dataset, sampler=sampler, batch_size=batch_size)
+
+    return dataloader, all_sections
 
 
 def eval():
