@@ -11,6 +11,7 @@ from loguru import logger
 from torch.utils.data import DataLoader, RandomSampler, SequentialSampler, TensorDataset
 from tqdm import tqdm, trange
 
+from bert.optimization import BertAdam
 from bert.tokenization import BertTokenizer
 from eval import evalb
 from label_encoder import LabelEncoder
@@ -253,6 +254,59 @@ def main(*_, **kwargs):
         is_eval=True,
     )
     logger.info("Dataloaders created!")
+
+    # Initialize model
+    model = ChartParser.from_pretrained(
+        kwargs["bert_model"],
+        tag_encoder=tag_encoder,
+        label_encoder=label_encoder,
+        tag_embedding_dim=kwargs["tag_embedding_dim"],
+        label_hidden_dim=kwargs["label_hidden_dim"],
+        dropout_prob=kwargs["dropout_prob"],
+    )
+
+    model.to(device)
+
+    # Prepare optimizer
+    param_optimizers = list(model.named_parameters())
+
+    # Hack to remove pooler, which is not used thus it produce None grad that break apex
+    param_optimizers = [n for n in param_optimizers if "pooler" not in n[0]]
+
+    no_decay = ["bias", "LayerNorm.bias", "LayerNorm.weight"]
+    optimizer_grouped_parameters = [
+        {
+            "params": [
+                p for n, p in param_optimizers if not any(nd in n for nd in no_decay)
+            ],
+            "weight_decay": 0.01,
+        },
+        {
+            "params": [
+                p for n, p in param_optimizers if any(nd in n for nd in no_decay)
+            ],
+            "weight_decay": 0.0,
+        },
+    ]
+
+    optimizer = BertAdam(
+        optimizer_grouped_parameters,
+        lr=kwargs["learning_rate"],
+        warmup=kwargs["warmup_proportion"],
+        t_total=num_train_optimization_steps,
+    )
+
+    if kwargs["fp16"]:
+        model, optimizer = amp.initialize(model, optimizer, opt_level="O1")
+
+    if kwargs["do_eval"]:
+        pass
+    else:
+        # Training phase
+        global_steps = 0
+
+        for epoch in trange(kwargs["num_epochs"], desc="Epoch"):
+            model.train()
 
 
 if __name__ == "__main__":
