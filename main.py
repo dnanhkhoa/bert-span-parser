@@ -117,7 +117,11 @@ def eval():
 @click.option("--train_file", required=True, type=click.Path())
 @click.option("--dev_file", required=True, type=click.Path())
 @click.option("--test_file", required=True, type=click.Path())
+@click.option("--output_dir", required=True, type=click.Path())
 @click.option("--bert_model", required=True, type=click.Path())
+@click.option("--tag-embedding-dim", default=50, show_default=True, type=click.INT)
+@click.option("--label-hidden-dim", default=250, show_default=True, type=click.INT)
+@click.option("--dropout_prob", default=0.4, show_default=True, type=click.FLOAT)
 @click.option("--batch_size", default=16, show_default=True, type=click.INT)
 @click.option("--num_epochs", default=10, show_default=True, type=click.INT)
 @click.option("--max_seq_length", default=256, show_default=True, type=click.INT)
@@ -156,6 +160,7 @@ if __name__ == "__main__":
             "--train_file=corpora/WSJ-PTB/02-21.10way.clean.train",
             "--dev_file=corpora/WSJ-PTB/22.auto.clean.dev",
             "--test_file=corpora/WSJ-PTB/23.auto.clean.test",
+            "--output_dir=outputs",
             "--bert_model=models/bert-base-multilingual-cased",
             # "--fp16",
             # "--do_eval",
