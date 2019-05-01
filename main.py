@@ -15,7 +15,7 @@ from bert.tokenization import BertTokenizer
 from eval import evalb
 from label_encoder import LabelEncoder
 from model import ChartParser
-from trees import load_trees
+from trees import InternalParseNode, load_trees
 
 TAG_UNK = "UNK"
 
@@ -40,14 +40,29 @@ BERT_TOKEN_MAPPING = {
     "›": "'",
 }
 
+LABEL_MAPPING = {
+    "``": '"',
+    "''": '"',
+    "`": "'",
+    "«": '"',
+    "»": '"',
+    "‘": "'",
+    "’": "'",
+    "“": '"',
+    "”": '"',
+    "„": '"',
+    "‹": "'",
+    "›": "'",
+}
 
-def create_data_loader(sentences, batch_size, max_seq_length, tokenizer, is_eval):
+
+def create_dataloader(sentences, batch_size, max_seq_length, tokenizer, is_eval):
     features = []
     for sentence in sentences:
         tokens = []
         sections = []
-        for token in sentence:
-            subtokens = tokenizer.tokenize(BERT_TOKEN_MAPPING.get(token, token))
+        for _, token in sentence:
+            subtokens = tokenizer.tokenize(token)
             tokens.extend(subtokens)
             sections.append(len(subtokens))
 
@@ -146,12 +161,98 @@ def main(*_, **kwargs):
     random.seed(kwargs["seed"])
     torch.manual_seed(kwargs["seed"])
     torch.cuda.manual_seed_all(kwargs["seed"])
-
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False
 
+    # Prepare and load data
+    tokenizer = BertTokenizer.from_pretrained(kwargs["bert_model"], do_lower_case=False)
+
+    logger.info("Loading data...")
+    train_treebank = load_trees(
+        kwargs["train_file"],
+        label_mapping=LABEL_MAPPING,
+        word_mapping=BERT_TOKEN_MAPPING,
+    )
+    dev_treebank = load_trees(
+        kwargs["dev_file"], label_mapping=LABEL_MAPPING, word_mapping=BERT_TOKEN_MAPPING
+    )
+    test_treebank = load_trees(
+        kwargs["test_file"],
+        label_mapping=LABEL_MAPPING,
+        word_mapping=BERT_TOKEN_MAPPING,
+    )
+    logger.info(
+        "Loaded {:,} train, {:,} dev, and {:,} test examples!",
+        len(train_treebank),
+        len(dev_treebank),
+        len(test_treebank),
+    )
+
+    logger.info("Preprocessing data...")
+    train_parse = [tree.convert() for tree in train_treebank]
+    train_sentences = [
+        [(leaf.tag, leaf.word) for leaf in tree.leaves()] for tree in train_parse
+    ]
+    dev_sentences = [
+        [(leaf.tag, leaf.word) for leaf in tree.leaves()] for tree in dev_treebank
+    ]
+    test_sentences = [
+        [(leaf.tag, leaf.word) for leaf in tree.leaves()] for tree in test_treebank
+    ]
+    logger.info("Data preprocessed!")
+
+    logger.info("Preparing data for training...")
+
+    tags = []
+    labels = [()]
+
+    for tree in train_parse:
+        nodes = [tree]
+        while nodes:
+            node = nodes.pop()
+            if isinstance(node, InternalParseNode):
+                labels.append(node.label)
+                nodes.extend(reversed(node.children))
+            else:
+                tags.append(node.tag)
+
+    tag_encoder = LabelEncoder(unk_label=TAG_UNK)
+    tag_encoder.fit(tags)
+
+    label_encoder = LabelEncoder(unk_label=TAG_UNK)
+    label_encoder.fit(labels)
+
+    logger.info("Data prepared!")
+
     # Settings
-    batch_size = kwargs["batch_size"] // kwargs["gradient_accumulation_steps"]
+    num_train_optimization_steps = kwargs["num_epochs"] * (
+        (len(train_parse) - 1) // kwargs["batch_size"] + 1
+    )
+    kwargs["batch_size"] //= kwargs["gradient_accumulation_steps"]
+
+    logger.info("Creating dataloaders for training...")
+    train_dataloader, train_sections = create_dataloader(
+        sentences=train_sentences,
+        batch_size=kwargs["batch_size"],
+        max_seq_length=kwargs["max_seq_length"],
+        tokenizer=tokenizer,
+        is_eval=False,
+    )
+    dev_dataloader, dev_sections = create_dataloader(
+        sentences=dev_sentences,
+        batch_size=kwargs["batch_size"],
+        max_seq_length=kwargs["max_seq_length"],
+        tokenizer=tokenizer,
+        is_eval=True,
+    )
+    test_dataloader, test_sections = create_dataloader(
+        sentences=test_sentences,
+        batch_size=kwargs["batch_size"],
+        max_seq_length=kwargs["max_seq_length"],
+        tokenizer=tokenizer,
+        is_eval=True,
+    )
+    logger.info("Dataloaders created!")
 
 
 if __name__ == "__main__":
