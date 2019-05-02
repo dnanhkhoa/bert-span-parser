@@ -225,6 +225,7 @@ class BertConfig(object):
             writer.write(self.to_json_string())
 
 try:
+    raise ImportError()
     from apex.normalization.fused_layer_norm import FusedLayerNorm as BertLayerNorm
 except ImportError:
     logger.info("Better speed can be achieved with apex installed from https://www.github.com/nvidia/apex .")
