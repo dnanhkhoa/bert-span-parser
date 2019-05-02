@@ -19,8 +19,6 @@ from label_encoder import LabelEncoder
 from model import ChartParser
 from trees import InternalParseNode, load_trees
 
-TAG_UNK = "UNK"
-
 BERT_TOKEN_MAPPING = {
     "-LRB-": "(",
     "-RRB-": ")",
@@ -213,7 +211,7 @@ def main(*_, **kwargs):
     logger.info("Preparing data for training...")
 
     tags = []
-    labels = [()]
+    labels = []
 
     for tree in train_parse:
         nodes = [tree]
@@ -225,11 +223,11 @@ def main(*_, **kwargs):
             else:
                 tags.append(node.tag)
 
-    tag_encoder = LabelEncoder(unk_label=TAG_UNK)
-    tag_encoder.fit(tags)
+    tag_encoder = LabelEncoder()
+    tag_encoder.fit(tags, reserved_labels=["[PAD]"])
 
-    label_encoder = LabelEncoder(unk_label=TAG_UNK)
-    label_encoder.fit(labels)
+    label_encoder = LabelEncoder()
+    label_encoder.fit(labels, reserved_labels=[()])
 
     logger.info("Data prepared!")
 

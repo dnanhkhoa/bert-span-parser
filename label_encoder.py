@@ -29,13 +29,15 @@ class LabelEncoder(object):
 
         self.__indices = {v: k for k, v in self.__values.items()}
 
-    def transform(self, label, default=None):
+    def transform(self, label, unknown_label=None):
         assert self.__indices, "This {} instance is not fitted yet.".format(__name__)
-        return self.__indices.get(label, default)
+        if label in self.__indices:
+            return self.__indices[label]
+        return self.__indices[unknown_label]
 
-    def inverse_transform(self, _id, default=None):
+    def inverse_transform(self, _id):
         assert self.__indices, "This {} instance is not fitted yet.".format(__name__)
-        return self.__values.get(_id, default)
+        return self.__values[_id]
 
     @property
     def size(self):
