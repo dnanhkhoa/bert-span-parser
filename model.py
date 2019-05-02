@@ -2,8 +2,8 @@
 from functools import lru_cache
 
 import torch
-from torch import functional as F
 from torch import nn
+from torch.nn import functional as F
 
 from bert.modeling import BertModel, BertPreTrainedModel
 
@@ -34,14 +34,58 @@ class ChartParser(BertPreTrainedModel):
 
     def __parse(self, embeddings, sentence, gold_tree=None):
         @lru_cache(maxsize=None)
-        def get_span_encoding(left, right):
-            pass
+        def get_span_encoding(left, length):
+            span_embedding = embeddings.narrow(0, left, length)
+            if span_embedding.size(0) > 1:
+                return span_embedding.mean(dim=0, keepdim=True)
+            return span_embedding
 
         @lru_cache(maxsize=None)
-        def get_label_scores(left, right):
-            pass
+        def get_label_scores(left, length):
+            label_scores = self.label_classifier(get_span_encoding(left, length))
 
-        return 0, 0
+            # The original code did not use Softmax
+            label_scores = F.softmax(label_scores, dim=-1)
+
+            # Force zero score for label NULL ()
+            label_scores = torch.cat(
+                [
+                    torch.zeros((label_scores.size(0), 1), device=label_scores.device),
+                    label_scores,
+                ],
+                dim=-1,
+            )
+            return label_scores
+
+        def helper(force_gold):
+            if force_gold:
+                assert gold_tree
+
+            chart = {}
+
+            for length in range(1, len(sentence) + 1):
+                for left in range(0, len(sentence) + 1 - length):
+                    right = left + length
+
+                    label_scores = get_label_scores(left, length)
+
+        tree, score = helper(False)
+
+        if gold_tree:
+            oracle_tree, oracle_score = helper(True)
+
+            linearized_gold_tree = gold_tree.convert().linearize()
+
+            assert oracle_tree.convert().linearize() == linearized_gold_tree
+
+            loss = (
+                torch.zeros(1, device=embeddings.device)
+                if tree.convert().linearize() == linearized_gold_tree
+                else score - oracle_score
+            )
+            return tree, loss
+
+        return tree, score
 
     def forward(self, ids, attention_masks, tags, sections, sentences, gold_trees=None):
         subtoken_embeddings, _ = self.bert(
