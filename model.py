@@ -33,7 +33,7 @@ class ChartParser(BertPreTrainedModel):
 
         self.apply(self.init_bert_weights)
 
-    def forward(self, ids, attention_masks, sections, sentences, gold_trees=None):
+    def forward(self, ids, attention_masks, tags, sections, sentences, gold_trees=None):
         @lru_cache(maxsize=None)
         def get_span_encoding(left, right):
             pass

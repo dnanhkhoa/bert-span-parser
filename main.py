@@ -65,7 +65,7 @@ def create_dataloader(sentences, batch_size, tag_encoder, tokenizer, is_eval):
         for tag, token in sentence:
             subtokens = tokenizer.tokenize(token)
             tokens.extend(subtokens)
-            tags.append(tag_encoder.transform(tag, default="[UNK]"))
+            tags.append(tag_encoder.transform(tag, unknown_label="[UNK]"))
             sections.append(len(subtokens))
 
         ids = tokenizer.convert_tokens_to_ids(["[CLS]"] + tokens + ["[SEP]"])
@@ -89,22 +89,42 @@ def create_dataloader(sentences, batch_size, tag_encoder, tokenizer, is_eval):
     return dataloader, features
 
 
-def prepare_batch_input(
-    indices, ids, attention_masks, sections, trees, sentences, device
-):
-    _ids = ids.to(device)
-    _attention_masks = attention_masks.to(device)
-
+def prepare_batch_input(indices, features, trees, sentences, tag_encoder, device):
+    _ids = []
+    _attention_masks = []
+    _tags = []
     _sections = []
+
     _trees = []
     _sentences = []
 
+    ids_padding_size = 0
+    tags_padding_size = 0
+
     for _id in indices:
-        _sections.append(sections[_id])
+        _ids.append(features[_id]["ids"])
+        _attention_masks.append(features[_id]["attention_mask"])
+        _tags.append(features[_id]["tags"])
+        _sections.append(features[_id]["sections"])
+
         _trees.append(trees[_id])
         _sentences.append(sentences[_id])
 
-    return _ids, _attention_masks, _sections, _trees, _sentences
+        ids_padding_size = max(ids_padding_size, len(features[_id]["ids"]))
+        tags_padding_size = max(tags_padding_size, len(features[_id]["tags"]))
+
+    # Zero-pad
+    for _id, _attention_mask, _tag in zip(_ids, _attention_masks, _tags):
+        padding_size = ids_padding_size - len(_id)
+        _id += [0] * padding_size
+        _attention_mask += [0] * padding_size
+        _tag += [tag_encoder.transform("[PAD]")] * (tags_padding_size - len(_tag))
+
+    _ids = torch.tensor(_ids, dtype=torch.long).to(device)
+    _attention_masks = torch.tensor(_attention_masks, dtype=torch.long).to(device)
+    _tags = torch.tensor(_tags, dtype=torch.long).to(device)
+
+    return _ids, _attention_masks, _tags, _sections, _trees, _sentences
 
 
 def eval():
@@ -134,7 +154,7 @@ def main(*_, **kwargs):
     neptune.create_experiment(
         name="bert-span-parser",
         upload_source_files=[],
-        params={k: str(v) for k, v in kwargs.items()},
+        params={k: str(v) if isinstance(v, bool) else v for k, v in kwargs.items()},
     )
 
     logger.info(json.dumps(kwargs, indent=2, ensure_ascii=False))
@@ -295,27 +315,48 @@ def main(*_, **kwargs):
         for epoch in trange(kwargs["num_epochs"], desc="Epoch"):
             model.train()
 
-            for step, batch in enumerate(tqdm(train_dataloader, desc="Iteration")):
-                indices, ids, attention_masks = batch
-                ids, attention_masks, sections, trees, sentences = prepare_batch_input(
+            train_loss = 0
+            num_train_steps = 0
+
+            for step, (indices, *_) in enumerate(
+                tqdm(train_dataloader, desc="Iteration")
+            ):
+                ids, attention_masks, tags, sections, trees, sentences = prepare_batch_input(
                     indices=indices,
-                    ids=ids,
-                    attention_masks=attention_masks,
-                    sections=train_sections,
+                    features=train_features,
                     trees=train_parse,
                     sentences=train_sentences,
+                    tag_encoder=tag_encoder,
                     device=device,
                 )
 
                 _, loss = model(
                     ids=ids,
                     attention_masks=attention_masks,
+                    tags=tags,
                     sections=sections,
                     sentences=sentences,
                     gold_trees=trees,
                 )
-                break
 
+                if kwargs["gradient_accumulation_steps"] > 1:
+                    loss /= kwargs["gradient_accumulation_steps"]
+
+                if kwargs["fp16"]:
+                    with amp.scale_loss(loss, optimizer) as scaled_loss:
+                        scaled_loss.backward()
+                else:
+                    loss.backward()
+
+                train_loss += loss.item()
+                num_train_steps += 1
+
+                if (step + 1) % kwargs["gradient_accumulation_steps"] == 0:
+                    optimizer.step()
+                    optimizer.zero_grad()
+                    global_steps += 1
+
+                break
             break
 
 
