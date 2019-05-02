@@ -56,54 +56,37 @@ LABEL_MAPPING = {
 }
 
 
-def create_dataloader(sentences, batch_size, max_seq_length, tokenizer, is_eval):
+def create_dataloader(sentences, batch_size, tag_encoder, tokenizer, is_eval):
     features = []
     for sentence in sentences:
         tokens = []
+        tags = []
         sections = []
-        for _, token in sentence:
+        for tag, token in sentence:
             subtokens = tokenizer.tokenize(token)
             tokens.extend(subtokens)
+            tags.append(tag_encoder.transform(tag, default="[UNK]"))
             sections.append(len(subtokens))
-
-        num_tokens = len(tokens)
-
-        # Account for [CLS] and [SEP] tokens
-        if num_tokens > max_seq_length - 2:
-            num_tokens = max_seq_length - 2
-            tokens = tokens[:num_tokens]
-            logger.warning("Too long sentence: {}", sentence)
 
         ids = tokenizer.convert_tokens_to_ids(["[CLS]"] + tokens + ["[SEP]"])
         attention_mask = [1] * len(ids)
 
-        # Zero-pad up to the maximum sequence length
-        padding_size = max_seq_length - len(ids)
-
-        ids += [0] * padding_size
-        attention_mask += [0] * padding_size
-
-        assert len(ids) == max_seq_length
-        assert len(attention_mask) == max_seq_length
-
         features.append(
-            {"ids": ids, "attention_mask": attention_mask, "sections": sections}
+            {
+                "ids": ids,
+                "attention_mask": attention_mask,
+                "tags": tags,
+                "sections": sections,
+            }
         )
 
-    all_indices = torch.arange(len(features), dtype=torch.long)
-    all_ids = torch.tensor([feature["ids"] for feature in features], dtype=torch.long)
-    all_attention_masks = torch.tensor(
-        [feature["attention_mask"] for feature in features], dtype=torch.long
-    )
-    all_sections = [feature["sections"] for feature in features]
-
-    dataset = TensorDataset(all_indices, all_ids, all_attention_masks)
+    dataset = TensorDataset(torch.arange(len(features), dtype=torch.long))
 
     sampler = SequentialSampler(dataset) if is_eval else RandomSampler(dataset)
 
     dataloader = DataLoader(dataset, sampler=sampler, batch_size=batch_size)
 
-    return dataloader, all_sections
+    return dataloader, features
 
 
 def prepare_batch_input(
