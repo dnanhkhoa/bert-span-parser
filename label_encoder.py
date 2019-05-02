@@ -3,8 +3,7 @@ import collections
 
 
 class LabelEncoder(object):
-    def __init__(self, unk_label="UNK"):
-        self.__unk_label = unk_label
+    def __init__(self):
         self.__values = {}
         self.__indices = {}
 
@@ -24,23 +23,19 @@ class LabelEncoder(object):
             for label in reserved_labels:
                 self.__values[len(self.__values)] = label
 
-        self.__values[len(self.__values)] = self.__unk_label
-
         for k, v in sorted_freq_table:
             if v >= min_freq:
                 self.__values[len(self.__values)] = k
 
         self.__indices = {v: k for k, v in self.__values.items()}
 
-    def transform(self, label):
+    def transform(self, label, default=None):
         assert self.__indices, "This {} instance is not fitted yet.".format(__name__)
-        if label in self.__indices:
-            return self.__indices[label]
-        return self.__indices[self.__unk_label]
+        return self.__indices.get(label, default)
 
-    def inverse_transform(self, _id):
+    def inverse_transform(self, _id, default=None):
         assert self.__indices, "This {} instance is not fitted yet.".format(__name__)
-        return self.__values.get(_id, self.__unk_label)
+        return self.__values.get(_id, default)
 
     @property
     def size(self):

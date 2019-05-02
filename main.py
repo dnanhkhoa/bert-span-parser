@@ -154,7 +154,7 @@ def main(*_, **kwargs):
     neptune.create_experiment(
         name="bert-span-parser",
         upload_source_files=[],
-        params={k: str(v) if isinstance(v, bool) else v for k, v in kwargs.items()},
+        params={k: str(v) for k, v in kwargs.items()},
     )
 
     logger.info(json.dumps(kwargs, indent=2, ensure_ascii=False))
