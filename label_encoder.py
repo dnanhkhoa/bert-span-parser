@@ -5,10 +5,10 @@ import collections
 class LabelEncoder(object):
     def __init__(self, unk_label="UNK"):
         self.__unk_label = unk_label
-        self.__values = None
-        self.__indices = None
+        self.__values = {}
+        self.__indices = {}
 
-    def fit(self, labels, min_freq=1):
+    def fit(self, labels, reserved_labels=None, min_freq=1):
         assert not self.__indices, "This {} instance has already fitted.".format(
             __name__
         )
@@ -20,7 +20,11 @@ class LabelEncoder(object):
 
         sorted_freq_table = sorted(freq_table.items(), key=lambda v: (-v[1], v[0]))
 
-        self.__values = {0: self.__unk_label}
+        if isinstance(reserved_labels, list):
+            for label in reserved_labels:
+                self.__values[len(self.__values)] = label
+
+        self.__values[len(self.__values)] = self.__unk_label
 
         for k, v in sorted_freq_table:
             if v >= min_freq:
@@ -40,4 +44,4 @@ class LabelEncoder(object):
 
     @property
     def size(self):
-        return len(self.__values) if self.__values else 0
+        return len(self.__values)
