@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+import json
 import os
 import random
 
@@ -136,7 +137,6 @@ def eval():
 @click.option("--output_dir", required=True, type=click.Path())
 @click.option("--bert_model", required=True, type=click.Path())
 @click.option("--tag-embedding-dim", default=50, show_default=True, type=click.INT)
-@click.option("--label-hidden-dim", default=250, show_default=True, type=click.INT)
 @click.option("--dropout_prob", default=0.4, show_default=True, type=click.FLOAT)
 @click.option("--batch_size", default=16, show_default=True, type=click.INT)
 @click.option("--num_epochs", default=10, show_default=True, type=click.INT)
@@ -151,6 +151,14 @@ def eval():
 @click.option("--fp16", is_flag=True)
 @click.option("--do_eval", is_flag=True)
 def main(*_, **kwargs):
+    neptune.create_experiment(
+        name="bert-span-parser",
+        upload_source_files=[],
+        params={k: str(v) if isinstance(v, bool) else v for k, v in kwargs.items()},
+    )
+
+    logger.info(json.dumps(kwargs, indent=2, ensure_ascii=False))
+
     use_cuda = torch.cuda.is_available()
     device = torch.device("cuda:" + str(kwargs["device"]) if use_cuda else "cpu")
 
@@ -261,7 +269,6 @@ def main(*_, **kwargs):
         tag_encoder=tag_encoder,
         label_encoder=label_encoder,
         tag_embedding_dim=kwargs["tag_embedding_dim"],
-        label_hidden_dim=kwargs["label_hidden_dim"],
         dropout_prob=kwargs["dropout_prob"],
     )
 
@@ -308,16 +315,46 @@ def main(*_, **kwargs):
         for epoch in trange(kwargs["num_epochs"], desc="Epoch"):
             model.train()
 
+            for step, batch in enumerate(tqdm(train_dataloader, desc="Iteration")):
+                indices, ids, attention_masks = batch
+                ids, attention_masks, sections, trees, sentences = prepare_batch_input(
+                    indices=indices,
+                    ids=ids,
+                    attention_masks=attention_masks,
+                    sections=train_sections,
+                    trees=train_parse,
+                    sentences=train_sentences,
+                    device=device,
+                )
+
+                _, loss = model(
+                    ids=ids,
+                    attention_masks=attention_masks,
+                    sections=sections,
+                    sentences=sentences,
+                    gold_trees=trees,
+                )
+                break
+
+            break
+
 
 if __name__ == "__main__":
-    main(
-        [
-            "--train_file=corpora/WSJ-PTB/02-21.10way.clean.train",
-            "--dev_file=corpora/WSJ-PTB/22.auto.clean.dev",
-            "--test_file=corpora/WSJ-PTB/23.auto.clean.test",
-            "--output_dir=outputs",
-            "--bert_model=models/bert-base-multilingual-cased",
-            # "--fp16",
-            # "--do_eval",
-        ]
-    )
+    neptune.init(project_qualified_name=os.getenv("NEPTUNE_PROJECT_NAME"))
+    try:
+        main(
+            [
+                "--train_file=corpora/WSJ-PTB/02-21.10way.clean.train",
+                "--dev_file=corpora/WSJ-PTB/22.auto.clean.dev",
+                "--test_file=corpora/WSJ-PTB/23.auto.clean.test",
+                "--output_dir=outputs",
+                "--bert_model=models/bert-base-multilingual-cased",
+                "--batch_size=16",
+                "--num_epochs=10",
+                "--learning_rate=3e-5",
+                # "--fp16",
+                # "--do_eval",
+            ]
+        )
+    finally:
+        neptune.stop()
