@@ -152,7 +152,7 @@ def eval():
 @click.option("--do_eval", is_flag=True)
 def main(*_, **kwargs):
     use_cuda = torch.cuda.is_available()
-    device = torch.cuda.device("cuda:" + str(kwargs["device"]) if use_cuda else "cpu")
+    device = torch.device("cuda:" + str(kwargs["device"]) if use_cuda else "cpu")
 
     if use_cuda:
         torch.cuda.set_device(device)
