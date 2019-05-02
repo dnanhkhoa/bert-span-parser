@@ -138,7 +138,7 @@ def eval():
 @click.option("--output_dir", required=True, type=click.Path())
 @click.option("--bert_model", required=True, type=click.Path())
 @click.option("--tag_embedding_dim", default=50, show_default=True, type=click.INT)
-@click.option("--dropout_prob", default=0.4, show_default=True, type=click.FLOAT)
+@click.option("--dropout_prob", default=0.1, show_default=True, type=click.FLOAT)
 @click.option("--batch_size", default=16, show_default=True, type=click.INT)
 @click.option("--num_epochs", default=10, show_default=True, type=click.INT)
 @click.option("--learning_rate", default=3e-5, show_default=True, type=click.FLOAT)
