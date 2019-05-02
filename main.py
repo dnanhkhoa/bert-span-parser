@@ -117,11 +117,10 @@ def eval():
 @click.option("--test_file", required=True, type=click.Path())
 @click.option("--output_dir", required=True, type=click.Path())
 @click.option("--bert_model", required=True, type=click.Path())
-@click.option("--tag-embedding-dim", default=50, show_default=True, type=click.INT)
+@click.option("--tag_embedding_dim", default=50, show_default=True, type=click.INT)
 @click.option("--dropout_prob", default=0.4, show_default=True, type=click.FLOAT)
 @click.option("--batch_size", default=16, show_default=True, type=click.INT)
 @click.option("--num_epochs", default=10, show_default=True, type=click.INT)
-@click.option("--max_seq_length", default=256, show_default=True, type=click.INT)
 @click.option("--learning_rate", default=3e-5, show_default=True, type=click.FLOAT)
 @click.option("--warmup_proportion", default=0.1, show_default=True, type=click.FLOAT)
 @click.option(
@@ -207,7 +206,7 @@ def main(*_, **kwargs):
                 tags.append(node.tag)
 
     tag_encoder = LabelEncoder()
-    tag_encoder.fit(tags, reserved_labels=["[PAD]"])
+    tag_encoder.fit(tags, reserved_labels=["[PAD]", "[UNK]"])
 
     label_encoder = LabelEncoder()
     label_encoder.fit(labels, reserved_labels=[()])
@@ -221,24 +220,24 @@ def main(*_, **kwargs):
     kwargs["batch_size"] //= kwargs["gradient_accumulation_steps"]
 
     logger.info("Creating dataloaders for training...")
-    train_dataloader, train_sections = create_dataloader(
+    train_dataloader, train_features = create_dataloader(
         sentences=train_sentences,
         batch_size=kwargs["batch_size"],
-        max_seq_length=kwargs["max_seq_length"],
+        tag_encoder=tag_encoder,
         tokenizer=tokenizer,
         is_eval=False,
     )
-    dev_dataloader, dev_sections = create_dataloader(
+    dev_dataloader, dev_features = create_dataloader(
         sentences=dev_sentences,
         batch_size=kwargs["batch_size"],
-        max_seq_length=kwargs["max_seq_length"],
+        tag_encoder=tag_encoder,
         tokenizer=tokenizer,
         is_eval=True,
     )
-    test_dataloader, test_sections = create_dataloader(
+    test_dataloader, test_features = create_dataloader(
         sentences=test_sentences,
         batch_size=kwargs["batch_size"],
-        max_seq_length=kwargs["max_seq_length"],
+        tag_encoder=tag_encoder,
         tokenizer=tokenizer,
         is_eval=True,
     )
