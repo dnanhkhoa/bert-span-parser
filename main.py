@@ -162,8 +162,8 @@ def eval(
 @click.option("--bert_model", required=True, type=click.Path())
 @click.option("--tag_embedding_dim", default=50, show_default=True, type=click.INT)
 @click.option("--dropout_prob", default=0.1, show_default=True, type=click.FLOAT)
-@click.option("--batch_size", default=16, show_default=True, type=click.INT)
-@click.option("--num_epochs", default=10, show_default=True, type=click.INT)
+@click.option("--batch_size", default=32, show_default=True, type=click.INT)
+@click.option("--num_epochs", default=20, show_default=True, type=click.INT)
 @click.option("--learning_rate", default=3e-5, show_default=True, type=click.FLOAT)
 @click.option("--warmup_proportion", default=0.1, show_default=True, type=click.FLOAT)
 @click.option(
@@ -458,19 +458,20 @@ def main(*_, **kwargs):
 if __name__ == "__main__":
     neptune.init(project_qualified_name=os.getenv("NEPTUNE_PROJECT_NAME"))
     try:
-        main(
-            [
-                "--train_file=corpora/WSJ-PTB/02-21.10way.clean.train",
-                "--dev_file=corpora/WSJ-PTB/22.auto.clean.dev",
-                "--test_file=corpora/WSJ-PTB/23.auto.clean.test",
-                "--output_dir=outputs",
-                "--bert_model=models/bert-base-multilingual-cased",
-                "--batch_size=28",
-                "--num_epochs=20",
-                "--learning_rate=3e-5",
-                # "--fp16",
-                # "--do_eval",
-            ]
-        )
+        # main(
+        #     [
+        #         "--train_file=corpora/WSJ-PTB/02-21.10way.clean.train",
+        #         "--dev_file=corpora/WSJ-PTB/22.auto.clean.dev",
+        #         "--test_file=corpora/WSJ-PTB/23.auto.clean.test",
+        #         "--output_dir=outputs",
+        #         "--bert_model=models/bert-base-multilingual-cased",
+        #         "--batch_size=32",
+        #         "--num_epochs=20",
+        #         "--learning_rate=3e-5",
+        #         # "--fp16",
+        #         # "--do_eval",
+        #     ]
+        # )
+        main()
     finally:
         neptune.stop()
