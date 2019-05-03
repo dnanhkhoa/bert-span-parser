@@ -174,6 +174,14 @@ def eval(
 @click.option("--fp16", is_flag=True)
 @click.option("--do_eval", is_flag=True)
 def main(*_, **kwargs):
+    use_cuda = torch.cuda.is_available()
+    device = torch.device("cuda:" + str(kwargs["device"]) if use_cuda else "cpu")
+
+    if use_cuda:
+        torch.cuda.set_device(device)
+
+    kwargs["use_cuda"] = use_cuda
+
     neptune.create_experiment(
         name="bert-span-parser",
         upload_source_files=[],
@@ -181,12 +189,6 @@ def main(*_, **kwargs):
     )
 
     logger.info("Settings: {}", json.dumps(kwargs, indent=2, ensure_ascii=False))
-
-    use_cuda = torch.cuda.is_available()
-    device = torch.device("cuda:" + str(kwargs["device"]) if use_cuda else "cpu")
-
-    if use_cuda:
-        torch.cuda.set_device(device)
 
     # For reproducibility
     os.environ["PYTHONHASHSEED"] = str(kwargs["seed"])
@@ -353,6 +355,11 @@ def main(*_, **kwargs):
 
         tqdm.write("Evaluation score: {}".format(str(eval_score)))
     else:
+        pretrained_model_file = os.path.join(kwargs["output_dir"], MODEL_FILENAME)
+        assert not os.path.isfile(
+            pretrained_model_file
+        ), "Please remove or move the pretrained model file to another place!"
+
         # Training phase
         global_steps = 0
         best_dev_fscore = 0
@@ -441,10 +448,6 @@ def main(*_, **kwargs):
 
                 os.makedirs(kwargs["output_dir"], exist_ok=True)
 
-                pretrained_model_file = os.path.join(
-                    kwargs["output_dir"], MODEL_FILENAME
-                )
-
                 torch.save(
                     (model.module if hasattr(model, "module") else model).state_dict(),
                     pretrained_model_file,
@@ -470,6 +473,22 @@ if __name__ == "__main__":
         #         # "--do_eval",
         #     ]
         # )
+
+        # main(
+        #     [
+        #         "--train_file=corpora/Small-WSJ-PTB/small",
+        #         "--dev_file=corpora/Small-WSJ-PTB/small",
+        #         "--test_file=corpora/Small-WSJ-PTB/small",
+        #         "--output_dir=outputs",
+        #         "--bert_model=models/bert-base-multilingual-cased",
+        #         "--batch_size=32",
+        #         "--num_epochs=20",
+        #         "--learning_rate=3e-5",
+        #         # "--fp16",
+        #         # "--do_eval",
+        #     ]
+        # )
+
         main()
     finally:
         neptune.stop()
