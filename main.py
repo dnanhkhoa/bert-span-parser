@@ -332,6 +332,8 @@ def main(*_, **kwargs):
             pretrained_model_file
         ), "Pretrained model file does not exist!"
 
+        logger.info("Loading pretrained model from {}", pretrained_model_file)
+
         # Load model from file
         model.load_state_dict(torch.load(pretrained_model_file, map_location=device))
 
