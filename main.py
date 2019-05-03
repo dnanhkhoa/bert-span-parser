@@ -19,6 +19,8 @@ from label_encoder import LabelEncoder
 from model import ChartParser
 from trees import InternalParseNode, load_trees
 
+MODEL_FILENAME = "model.bin"
+
 BERT_TOKEN_MAPPING = {
     "-LRB-": "(",
     "-RRB-": ")",
@@ -26,21 +28,6 @@ BERT_TOKEN_MAPPING = {
     "-RCB-": "}",
     "-LSB-": "[",
     "-RSB-": "]",
-    "``": '"',
-    "''": '"',
-    "`": "'",
-    "«": '"',
-    "»": '"',
-    "‘": "'",
-    "’": "'",
-    "“": '"',
-    "”": '"',
-    "„": '"',
-    "‹": "'",
-    "›": "'",
-}
-
-LABEL_MAPPING = {
     "``": '"',
     "''": '"',
     "`": "'",
@@ -63,7 +50,7 @@ def create_dataloader(sentences, batch_size, tag_encoder, tokenizer, is_eval):
         tags = []
         sections = []
         for tag, token in sentence:
-            subtokens = tokenizer.tokenize(token)
+            subtokens = tokenizer.tokenize(BERT_TOKEN_MAPPING.get(token, token))
             tokens.extend(subtokens)
             tags.append(tag_encoder.transform(tag, unknown_label="[UNK]"))
             sections.append(len(subtokens))
@@ -127,8 +114,44 @@ def prepare_batch_input(indices, features, trees, sentences, tag_encoder, device
     return _ids, _attention_masks, _tags, _sections, _trees, _sentences
 
 
-def eval():
-    pass
+def eval(
+    model,
+    eval_dataloader,
+    eval_features,
+    eval_trees,
+    eval_sentences,
+    tag_encoder,
+    device,
+):
+    # Evaluation phase
+    model.eval()
+
+    all_predicted_trees = []
+
+    for indices, *_ in tqdm(eval_dataloader, desc="Iteration"):
+        ids, attention_masks, tags, sections, _, sentences = prepare_batch_input(
+            indices=indices,
+            features=eval_features,
+            trees=eval_trees,
+            sentences=eval_sentences,
+            tag_encoder=tag_encoder,
+            device=device,
+        )
+
+        with torch.no_grad():
+            predicted_trees, _ = model(
+                ids=ids,
+                attention_masks=attention_masks,
+                tags=tags,
+                sections=sections,
+                sentences=sentences,
+                gold_trees=None,
+            )
+
+            for predicted_tree in predicted_trees:
+                all_predicted_trees.append(predicted_tree.convert())
+
+    return evalb(eval_trees, all_predicted_trees)
 
 
 @click.command()
@@ -157,7 +180,7 @@ def main(*_, **kwargs):
         params={k: str(v) if isinstance(v, bool) else v for k, v in kwargs.items()},
     )
 
-    logger.info(json.dumps(kwargs, indent=2, ensure_ascii=False))
+    logger.info("Settings: {}", json.dumps(kwargs, indent=2, ensure_ascii=False))
 
     use_cuda = torch.cuda.is_available()
     device = torch.device("cuda:" + str(kwargs["device"]) if use_cuda else "cpu")
@@ -177,19 +200,11 @@ def main(*_, **kwargs):
     tokenizer = BertTokenizer.from_pretrained(kwargs["bert_model"], do_lower_case=False)
 
     logger.info("Loading data...")
-    train_treebank = load_trees(
-        kwargs["train_file"],
-        label_mapping=LABEL_MAPPING,
-        word_mapping=BERT_TOKEN_MAPPING,
-    )
-    dev_treebank = load_trees(
-        kwargs["dev_file"], label_mapping=LABEL_MAPPING, word_mapping=BERT_TOKEN_MAPPING
-    )
-    test_treebank = load_trees(
-        kwargs["test_file"],
-        label_mapping=LABEL_MAPPING,
-        word_mapping=BERT_TOKEN_MAPPING,
-    )
+
+    train_treebank = load_trees(kwargs["train_file"])
+    dev_treebank = load_trees(kwargs["dev_file"])
+    test_treebank = load_trees(kwargs["test_file"])
+
     logger.info(
         "Loaded {:,} train, {:,} dev, and {:,} test examples!",
         len(train_treebank),
@@ -198,6 +213,7 @@ def main(*_, **kwargs):
     )
 
     logger.info("Preprocessing data...")
+
     train_parse = [tree.convert() for tree in train_treebank]
     train_sentences = [
         [(leaf.tag, leaf.word) for leaf in tree.leaves()] for tree in train_parse
@@ -208,6 +224,7 @@ def main(*_, **kwargs):
     test_sentences = [
         [(leaf.tag, leaf.word) for leaf in tree.leaves()] for tree in test_treebank
     ]
+
     logger.info("Data preprocessed!")
 
     logger.info("Preparing data for training...")
@@ -240,6 +257,7 @@ def main(*_, **kwargs):
     kwargs["batch_size"] //= kwargs["gradient_accumulation_steps"]
 
     logger.info("Creating dataloaders for training...")
+
     train_dataloader, train_features = create_dataloader(
         sentences=train_sentences,
         batch_size=kwargs["batch_size"],
@@ -261,6 +279,7 @@ def main(*_, **kwargs):
         tokenizer=tokenizer,
         is_eval=True,
     )
+
     logger.info("Dataloaders created!")
 
     # Initialize model
@@ -307,10 +326,34 @@ def main(*_, **kwargs):
         model, optimizer = amp.initialize(model, optimizer, opt_level="O1")
 
     if kwargs["do_eval"]:
-        pass
+        pretrained_model_file = os.path.join(kwargs["output_dir"], MODEL_FILENAME)
+
+        assert os.path.isfile(
+            pretrained_model_file
+        ), "Pretrained model file does not exist!"
+
+        # Load model from file
+        model.load_state_dict(torch.load(pretrained_model_file, map_location=device))
+
+        eval_score = eval(
+            model=model,
+            eval_dataloader=test_dataloader,
+            eval_features=test_features,
+            eval_trees=test_treebank,
+            eval_sentences=test_sentences,
+            tag_encoder=tag_encoder,
+            device=device,
+        )
+
+        neptune.send_metric("test_eval_precision", eval_score.precision())
+        neptune.send_metric("test_eval_recall", eval_score.recall())
+        neptune.send_metric("test_eval_fscore", eval_score.fscore())
+
+        tqdm.write("Evaluation score: {}".format(str(eval_score)))
     else:
         # Training phase
         global_steps = 0
+        best_dev_fscore = 0
 
         for epoch in trange(kwargs["num_epochs"], desc="Epoch"):
             model.train()
@@ -351,6 +394,7 @@ def main(*_, **kwargs):
                     loss.backward()
 
                 train_loss += loss.item()
+
                 num_train_steps += 1
 
                 if (step + 1) % kwargs["gradient_accumulation_steps"] == 0:
@@ -358,8 +402,55 @@ def main(*_, **kwargs):
                     optimizer.zero_grad()
                     global_steps += 1
 
-                break
-            break
+            # Write logs
+            neptune.send_metric("train_loss", epoch, train_loss / num_train_steps)
+            neptune.send_metric("global_steps", epoch, global_steps)
+
+            tqdm.write(
+                "Epoch: {:,} - Train loss: {:.4f} - Global steps: {:,}".format(
+                    epoch, train_loss / num_train_steps, global_steps
+                )
+            )
+
+            # Evaluate
+            eval_score = eval(
+                model=model,
+                eval_dataloader=dev_dataloader,
+                eval_features=dev_features,
+                eval_trees=dev_treebank,
+                eval_sentences=dev_sentences,
+                tag_encoder=tag_encoder,
+                device=device,
+            )
+
+            neptune.send_metric("eval_precision", epoch, eval_score.precision())
+            neptune.send_metric("eval_recall", epoch, eval_score.recall())
+            neptune.send_metric("eval_fscore", epoch, eval_score.fscore())
+
+            tqdm.write(
+                "Epoch: {:,} - Evaluation score: {}".format(epoch, str(eval_score))
+            )
+
+            # Save best model
+            if eval_score.fscore() > best_dev_fscore:
+                best_dev_fscore = eval_score.fscore()
+
+                tqdm.write("** Saving model...")
+
+                os.makedirs(kwargs["output_dir"], exist_ok=True)
+
+                pretrained_model_file = os.path.join(
+                    kwargs["output_dir"], MODEL_FILENAME
+                )
+
+                os.remove(pretrained_model_file)
+
+                torch.save(
+                    (model.module if hasattr(model, "module") else model).state_dict(),
+                    pretrained_model_file,
+                )
+
+            tqdm.write("** Best evaluation fscore: {:.2f}".format(best_dev_fscore))
 
 
 if __name__ == "__main__":
