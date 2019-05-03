@@ -140,7 +140,7 @@ class LeafParseNode(ParseNode):
         return LeafTreebankNode(self.tag, self.word)
 
 
-def load_trees(path, label_mapping={}, word_mapping={}, strip_top=True):
+def load_trees(path, strip_top=True):
     with open(path) as infile:
         tokens = infile.read().replace("(", " ( ").replace(")", " ) ").split()
 
@@ -154,7 +154,6 @@ def load_trees(path, label_mapping={}, word_mapping={}, strip_top=True):
                 paren_count += 1
 
             label = tokens[index]
-            label = label_mapping.get(label, label)
             index += 1
 
             if tokens[index] == "(":
@@ -162,7 +161,6 @@ def load_trees(path, label_mapping={}, word_mapping={}, strip_top=True):
                 trees.append(InternalTreebankNode(label, children))
             else:
                 word = tokens[index]
-                word = word_mapping.get(word, word)
                 index += 1
                 trees.append(LeafTreebankNode(label, word))
 
