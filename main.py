@@ -344,7 +344,14 @@ def main(*_, **kwargs):
         logger.info("Loading pretrained model from {}", pretrained_model_file)
 
         # Load model from file
-        model.load_state_dict(torch.load(pretrained_model_file, map_location=device))
+        params = torch.load(pretrained_model_file, map_location=device)
+        model.load_state_dict(params["model"])
+
+        logger.info(
+            "Loaded pretrained model (Epoch: {:,}, Fscore: {:.2f})",
+            params["epoch"],
+            params["fscore"],
+        )
 
         eval_score = eval(
             model=model,
@@ -456,7 +463,13 @@ def main(*_, **kwargs):
                 os.makedirs(kwargs["output_dir"], exist_ok=True)
 
                 torch.save(
-                    (model.module if hasattr(model, "module") else model).state_dict(),
+                    {
+                        "epoch": epoch,
+                        "fscore": best_dev_fscore,
+                        "model": (
+                            model.module if hasattr(model, "module") else model
+                        ).state_dict(),
+                    },
                     pretrained_model_file,
                 )
 
