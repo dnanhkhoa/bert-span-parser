@@ -465,7 +465,7 @@ if __name__ == "__main__":
                 "--test_file=corpora/WSJ-PTB/23.auto.clean.test",
                 "--output_dir=outputs",
                 "--bert_model=models/bert-base-multilingual-cased",
-                "--batch_size=24",
+                "--batch_size=28",
                 "--num_epochs=20",
                 "--learning_rate=3e-5",
                 # "--fp16",
