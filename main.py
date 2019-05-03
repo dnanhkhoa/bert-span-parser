@@ -466,7 +466,7 @@ if __name__ == "__main__":
                 "--output_dir=outputs",
                 "--bert_model=models/bert-base-multilingual-cased",
                 "--batch_size=16",
-                "--num_epochs=10",
+                "--num_epochs=20",
                 "--learning_rate=3e-5",
                 # "--fp16",
                 # "--do_eval",
