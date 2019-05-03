@@ -173,8 +173,9 @@ def eval(
 @click.option("--seed", default=42, show_default=True, type=click.INT)
 @click.option("--device", default=0, show_default=True, type=click.INT)
 @click.option("--fp16", is_flag=True)
-@click.option("--freeze_bert", is_flag=True)
 @click.option("--do_eval", is_flag=True)
+@click.option("--resume", is_flag=True)
+@click.option("--freeze_bert", is_flag=True)
 def main(*_, **kwargs):
     use_cuda = torch.cuda.is_available()
     device = torch.device("cuda:" + str(kwargs["device"]) if use_cuda else "cpu")
@@ -334,9 +335,9 @@ def main(*_, **kwargs):
     if kwargs["fp16"]:
         model, optimizer = amp.initialize(model, optimizer, opt_level="O1")
 
-    if kwargs["do_eval"]:
-        pretrained_model_file = os.path.join(kwargs["output_dir"], MODEL_FILENAME)
+    pretrained_model_file = os.path.join(kwargs["output_dir"], MODEL_FILENAME)
 
+    if kwargs["do_eval"]:
         assert os.path.isfile(
             pretrained_model_file
         ), "Pretrained model file does not exist!"
@@ -345,6 +346,7 @@ def main(*_, **kwargs):
 
         # Load model from file
         params = torch.load(pretrained_model_file, map_location=device)
+
         model.load_state_dict(params["model"])
 
         logger.info(
@@ -369,16 +371,38 @@ def main(*_, **kwargs):
 
         tqdm.write("Evaluation score: {}".format(str(eval_score)))
     else:
-        pretrained_model_file = os.path.join(kwargs["output_dir"], MODEL_FILENAME)
-        assert not os.path.isfile(
-            pretrained_model_file
-        ), "Please remove or move the pretrained model file to another place!"
-
         # Training phase
         global_steps = 0
+        start_epoch = 0
         best_dev_fscore = 0
 
-        for epoch in trange(kwargs["num_epochs"], desc="Epoch"):
+        if kwargs["resume"]:
+            assert os.path.isfile(
+                pretrained_model_file
+            ), "Pretrained model file does not exist!"
+
+            logger.info("Resuming model from {}", pretrained_model_file)
+
+            # Load model from file
+            params = torch.load(pretrained_model_file, map_location=device)
+
+            model.load_state_dict(params["model"])
+            optimizer.load_state_dict(params["optimizer"])
+
+            torch.cuda.set_rng_state_all(params["torch_cuda_random_state_all"])
+            torch.set_rng_state(params["torch_random_state"])
+            random.setstate(params["random_state"])
+
+            global_steps = params["global_steps"]
+            start_epoch = params["epoch"] + 1
+            best_dev_fscore = params["fscore"]
+
+        else:
+            assert not os.path.isfile(
+                pretrained_model_file
+            ), "Please remove or move the pretrained model file to another place!"
+
+        for epoch in trange(start_epoch, kwargs["num_epochs"], desc="Epoch"):
             model.train()
 
             train_loss = 0
@@ -465,7 +489,12 @@ def main(*_, **kwargs):
                 torch.save(
                     {
                         "epoch": epoch,
+                        "global_steps": global_steps,
                         "fscore": best_dev_fscore,
+                        "random_state": random.getstate(),
+                        "torch_random_state": torch.get_rng_state(),
+                        "torch_cuda_random_state_all": torch.cuda.get_rng_state_all(),
+                        "optimizer": optimizer.state_dict(),
                         "model": (
                             model.module if hasattr(model, "module") else model
                         ).state_dict(),
@@ -484,21 +513,6 @@ if __name__ == "__main__":
         #         "--train_file=corpora/WSJ-PTB/02-21.10way.clean.train",
         #         "--dev_file=corpora/WSJ-PTB/22.auto.clean.dev",
         #         "--test_file=corpora/WSJ-PTB/23.auto.clean.test",
-        #         "--output_dir=outputs",
-        #         "--bert_model=models/bert-base-multilingual-cased",
-        #         "--batch_size=32",
-        #         "--num_epochs=20",
-        #         "--learning_rate=3e-5",
-        #         # "--fp16",
-        #         # "--do_eval",
-        #     ]
-        # )
-
-        # main(
-        #     [
-        #         "--train_file=corpora/Small-WSJ-PTB/small",
-        #         "--dev_file=corpora/Small-WSJ-PTB/small",
-        #         "--test_file=corpora/Small-WSJ-PTB/small",
         #         "--output_dir=outputs",
         #         "--bert_model=models/bert-base-multilingual-cased",
         #         "--batch_size=32",
