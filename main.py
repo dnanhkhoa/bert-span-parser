@@ -445,8 +445,6 @@ def main(*_, **kwargs):
                     kwargs["output_dir"], MODEL_FILENAME
                 )
 
-                os.remove(pretrained_model_file)
-
                 torch.save(
                     (model.module if hasattr(model, "module") else model).state_dict(),
                     pretrained_model_file,
