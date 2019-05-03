@@ -9,6 +9,7 @@ import torch
 
 # from apex import amp
 from loguru import logger
+from neptune.exceptions import NoExperimentContext
 from torch.utils.data import DataLoader, RandomSampler, SequentialSampler, TensorDataset
 from tqdm import tqdm, trange
 
@@ -491,4 +492,7 @@ if __name__ == "__main__":
 
         main()
     finally:
-        neptune.stop()
+        try:
+            neptune.stop()
+        except NoExperimentContext:
+            pass
