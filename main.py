@@ -330,7 +330,7 @@ def main(*_, **kwargs):
                     device=device,
                 )
 
-                _, loss = model(
+                _, losses = model(
                     ids=ids,
                     attention_masks=attention_masks,
                     tags=tags,
@@ -338,6 +338,8 @@ def main(*_, **kwargs):
                     sentences=sentences,
                     gold_trees=trees,
                 )
+
+                loss = torch.stack(losses).mean()
 
                 if kwargs["gradient_accumulation_steps"] > 1:
                     loss /= kwargs["gradient_accumulation_steps"]
