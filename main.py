@@ -173,6 +173,7 @@ def eval(
 @click.option("--seed", default=42, show_default=True, type=click.INT)
 @click.option("--device", default=0, show_default=True, type=click.INT)
 @click.option("--fp16", is_flag=True)
+@click.option("--freeze_bert", is_flag=True)
 @click.option("--do_eval", is_flag=True)
 def main(*_, **kwargs):
     use_cuda = torch.cuda.is_available()
@@ -298,6 +299,11 @@ def main(*_, **kwargs):
 
     # Prepare optimizer
     param_optimizers = list(model.named_parameters())
+
+    if kwargs["freeze_bert"]:
+        for p in model.bert.parameters():
+            p.requires_grad = False
+        param_optimizers = [(n, p) for n, p in param_optimizers if p.requires_grad]
 
     # Hack to remove pooler, which is not used thus it produce None grad that break apex
     param_optimizers = [n for n in param_optimizers if "pooler" not in n[0]]
