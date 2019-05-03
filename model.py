@@ -132,7 +132,7 @@ class ChartParser(BertPreTrainedModel):
             assert oracle_tree.convert().linearize() == linearized_gold_tree
 
             loss = (
-                torch.zeros(1, device=embeddings.device)
+                torch.zeros((), device=embeddings.device)
                 if tree.convert().linearize() == linearized_gold_tree
                 else score - oracle_score
             )
