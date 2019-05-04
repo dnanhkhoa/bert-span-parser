@@ -175,6 +175,7 @@ def eval(
 @click.option("--fp16", is_flag=True)
 @click.option("--do_eval", is_flag=True)
 @click.option("--resume", is_flag=True)
+@click.option("--preload", is_flag=True)
 @click.option("--freeze_bert", is_flag=True)
 def main(*_, **kwargs):
     use_cuda = torch.cuda.is_available()
@@ -376,7 +377,7 @@ def main(*_, **kwargs):
         start_epoch = 0
         best_dev_fscore = 0
 
-        if kwargs["resume"]:
+        if kwargs["preload"] or kwargs["resume"]:
             assert os.path.isfile(
                 pretrained_model_file
             ), "Pretrained model file does not exist!"
@@ -387,16 +388,17 @@ def main(*_, **kwargs):
             params = torch.load(pretrained_model_file, map_location=device)
 
             model.load_state_dict(params["model"])
-            optimizer.load_state_dict(params["optimizer"])
 
-            torch.cuda.set_rng_state_all(params["torch_cuda_random_state_all"])
-            torch.set_rng_state(params["torch_random_state"])
-            random.setstate(params["random_state"])
+            if kwargs["resume"]:
+                optimizer.load_state_dict(params["optimizer"])
 
-            global_steps = params["global_steps"]
-            start_epoch = params["epoch"] + 1
-            best_dev_fscore = params["fscore"]
+                torch.cuda.set_rng_state_all(params["torch_cuda_random_state_all"])
+                torch.set_rng_state(params["torch_random_state"])
+                random.setstate(params["random_state"])
 
+                global_steps = params["global_steps"]
+                start_epoch = params["epoch"] + 1
+                best_dev_fscore = params["fscore"]
         else:
             assert not os.path.isfile(
                 pretrained_model_file
