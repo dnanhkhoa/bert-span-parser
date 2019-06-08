@@ -5,7 +5,7 @@ import torch
 from torch import nn
 from torch.nn import functional as F
 
-from bert.modeling import BertModel, BertPreTrainedModel
+from bert.modeling import ACT2FN, BertModel, BertPreTrainedModel
 from trees import InternalParseNode, LeafParseNode
 
 
@@ -21,13 +21,19 @@ class ChartParser(BertPreTrainedModel):
         self.bert = BertModel(config)
 
         self.tag_embeddings = nn.Embedding(
-            num_embeddings=tag_encoder.size,
+            num_embeddings=len(tag_encoder),
             embedding_dim=tag_embedding_dim,
             padding_idx=tag_encoder.transform("[PAD]"),
         )
+
+        self.hidden_dense = nn.Linear(
+            in_features=config.hidden_size + tag_embedding_dim, out_features=250
+        )
+
+        self.intermediate_act_fn = ACT2FN[config.hidden_act]
+
         self.label_classifier = nn.Linear(
-            in_features=config.hidden_size + tag_embedding_dim,
-            out_features=label_encoder.size - 1,  # Skip label ()
+            in_features=250, out_features=len(label_encoder) - 1  # Skip label ()
         )
         self.dropout = nn.Dropout(dropout_prob)
 
@@ -41,7 +47,11 @@ class ChartParser(BertPreTrainedModel):
 
         @lru_cache(maxsize=None)
         def get_label_scores(left, length):
-            label_scores = self.label_classifier(get_span_encoding(left, length))
+            label_scores = self.label_classifier(
+                self.intermediate_act_fn(
+                    self.hidden_dense(get_span_encoding(left, length))
+                )
+            )
 
             # The original code did not use Softmax
             # label_scores = F.softmax(label_scores)
