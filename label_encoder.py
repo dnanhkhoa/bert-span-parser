@@ -39,6 +39,5 @@ class LabelEncoder(object):
         assert self.__indices, "This {} instance is not fitted yet.".format(__name__)
         return self.__values[_id]
 
-    @property
-    def size(self):
+    def __len__(self):
         return len(self.__values)
