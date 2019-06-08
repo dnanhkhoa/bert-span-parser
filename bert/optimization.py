@@ -19,12 +19,11 @@ import torch
 from torch.optim import Optimizer
 from torch.optim.optimizer import required
 from torch.nn.utils import clip_grad_norm_
-# import logging
+import logging
 import abc
 import sys
 
-from loguru import logger
-# logger = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 
 if sys.version_info >= (3, 4):
