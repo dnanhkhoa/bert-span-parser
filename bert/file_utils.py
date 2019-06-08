@@ -7,7 +7,8 @@ from __future__ import (absolute_import, division, print_function, unicode_liter
 
 import sys
 import json
-import logging
+# import logging
+from loguru import logger
 import os
 import shutil
 import tempfile
@@ -47,7 +48,7 @@ except (AttributeError, ImportError):
 CONFIG_NAME = "config.json"
 WEIGHTS_NAME = "pytorch_model.bin"
 
-logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
+# logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
 
 
 def url_to_filename(url, etag=None):

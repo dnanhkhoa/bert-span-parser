@@ -19,7 +19,8 @@ from __future__ import absolute_import, division, print_function, unicode_litera
 
 import copy
 import json
-import logging
+# import logging
+from loguru import logger
 import math
 import os
 import shutil
@@ -34,7 +35,7 @@ from torch.nn import CrossEntropyLoss
 
 from .file_utils import cached_path, WEIGHTS_NAME, CONFIG_NAME
 
-logger = logging.getLogger(__name__)
+# logger = logging.getLogger(__name__)
 
 PRETRAINED_MODEL_ARCHIVE_MAP = {
     'bert-base-uncased': "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-uncased.tar.gz",
