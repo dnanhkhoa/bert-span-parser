@@ -6,8 +6,6 @@ import random
 import click
 import neptune
 import torch
-
-# from apex import amp
 from loguru import logger
 from neptune.exceptions import NoExperimentContext
 from torch.utils.data import DataLoader, RandomSampler, SequentialSampler, TensorDataset
@@ -20,6 +18,11 @@ from label_encoder import LabelEncoder
 from model import ChartParser
 from trees import InternalParseNode, load_trees
 
+try:
+    from apex import amp
+except ImportError:
+    pass
+
 MODEL_FILENAME = "model.bin"
 
 BERT_TOKEN_MAPPING = {
@@ -29,18 +32,6 @@ BERT_TOKEN_MAPPING = {
     "-RCB-": "}",
     "-LSB-": "[",
     "-RSB-": "]",
-    "``": '"',
-    "''": '"',
-    "`": "'",
-    "«": '"',
-    "»": '"',
-    "‘": "'",
-    "’": "'",
-    "“": '"',
-    "”": '"',
-    "„": '"',
-    "‹": "'",
-    "›": "'",
 }
 
 
