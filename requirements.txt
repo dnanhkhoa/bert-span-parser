@@ -1,9 +1,9 @@
-torch
-tqdm
 boto3
-requests
-regex
 click
 loguru
 neptune-client
 psutil
+regex
+requests
+torch
+tqdm
