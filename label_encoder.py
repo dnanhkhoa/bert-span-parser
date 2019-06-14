@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-import collections
+from collections import Counter
 
 
 class LabelEncoder(object):
@@ -12,10 +12,7 @@ class LabelEncoder(object):
             __name__
         )
 
-        freq_table = collections.defaultdict(int)
-
-        for label in labels:
-            freq_table[label] += 1
+        freq_table = Counter(labels)
 
         sorted_freq_table = sorted(freq_table.items(), key=lambda v: (-v[1], v[0]))
 
