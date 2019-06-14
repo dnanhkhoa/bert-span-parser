@@ -17,15 +17,14 @@
 from __future__ import absolute_import, division, print_function, unicode_literals
 
 import collections
-# import logging
-from loguru import logger
+import logging
 import os
 import unicodedata
 from io import open
 
 from .file_utils import cached_path
 
-# logger = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 PRETRAINED_VOCAB_ARCHIVE_MAP = {
     'bert-base-uncased': "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-uncased-vocab.txt",
