@@ -1,21 +1,38 @@
 # -*- coding: utf-8 -*-
-import collections.abc
+from functools import lru_cache
 
 
-class TreebankNode(object):
+class TreebankNode:
     pass
 
 
+class LeafTreebankNode(TreebankNode):
+    __slots__ = ["tag", "word"]
+
+    def __init__(self, tag, word):
+        self.tag = tag
+        self.word = word
+
+    @lru_cache(maxsize=None)
+    def linearize(self):
+        return "({} {})".format(self.tag, self.word)
+
+    def leaves(self):
+        yield self
+
+    @lru_cache(maxsize=None)
+    def convert(self, index=0):
+        return LeafParseNode(index, self.tag, self.word)
+
+
 class InternalTreebankNode(TreebankNode):
+    __slots__ = ["label", "children"]
+
     def __init__(self, label, children):
-        assert isinstance(label, str)
         self.label = label
+        self.children = children
 
-        assert isinstance(children, collections.abc.Sequence)
-        assert all(isinstance(child, TreebankNode) for child in children)
-        assert children
-        self.children = tuple(children)
-
+    @lru_cache(maxsize=None)
     def linearize(self):
         return "({} {})".format(
             self.label, " ".join(child.linearize() for child in self.children)
@@ -25,7 +42,8 @@ class InternalTreebankNode(TreebankNode):
         for child in self.children:
             yield from child.leaves()
 
-    def convert(self, index=0, nocache=False):
+    @lru_cache(maxsize=None)
+    def convert(self, index=0):
         tree = self
         sublabels = [self.label]
 
@@ -40,56 +58,55 @@ class InternalTreebankNode(TreebankNode):
             children.append(child.convert(index=index))
             index = children[-1].right
 
-        return InternalParseNode(tuple(sublabels), children, nocache=nocache)
+        return InternalParseNode(sublabels, children)
 
 
-class LeafTreebankNode(TreebankNode):
-    def __init__(self, tag, word):
-        assert isinstance(tag, str)
+class ParseNode:
+    pass
+
+
+class LeafParseNode(ParseNode):
+    __slots__ = ["tag", "word", "left", "right"]
+
+    def __init__(self, index, tag, word):
         self.tag = tag
-
-        assert isinstance(word, str)
         self.word = word
+        self.left = index
+        self.right = index + 1
 
+    @lru_cache(maxsize=None)
     def linearize(self):
         return "({} {})".format(self.tag, self.word)
 
     def leaves(self):
         yield self
 
-    def convert(self, index=0):
-        return LeafParseNode(index, self.tag, self.word)
-
-
-class ParseNode(object):
-    pass
+    @lru_cache(maxsize=None)
+    def convert(self):
+        return LeafTreebankNode(self.tag, self.word)
 
 
 class InternalParseNode(ParseNode):
-    def __init__(self, label, children, nocache=False):
-        assert isinstance(label, tuple)
-        assert all(isinstance(sublabel, str) for sublabel in label)
-        assert label
+    __slots__ = ["label", "children", "left", "right"]
+
+    def __init__(self, label, children):
         self.label = label
-
-        assert isinstance(children, collections.abc.Sequence)
-        assert all(isinstance(child, ParseNode) for child in children)
-        assert children
-        assert len(children) > 1 or isinstance(children[0], LeafParseNode)
-        assert all(
-            left.right == right.left for left, right in zip(children, children[1:])
-        )
-        self.children = tuple(children)
-
+        self.children = children
         self.left = children[0].left
         self.right = children[-1].right
 
-        self.nocache = nocache
+    @lru_cache(maxsize=None)
+    def linearize(self):
+        return "({} {})".format(
+            "->".join(self.label),
+            " ".join(child.linearize() for child in self.children),
+        )
 
     def leaves(self):
         for child in self.children:
             yield from child.leaves()
 
+    @lru_cache(maxsize=None)
     def convert(self):
         children = [child.convert() for child in self.children]
         tree = InternalTreebankNode(self.label[-1], children)
@@ -97,8 +114,8 @@ class InternalParseNode(ParseNode):
             tree = InternalTreebankNode(sublabel, [tree])
         return tree
 
+    @lru_cache(maxsize=None)
     def enclosing(self, left, right):
-        assert self.left <= left < right <= self.right
         for child in self.children:
             if isinstance(child, LeafParseNode):
                 continue
@@ -106,12 +123,14 @@ class InternalParseNode(ParseNode):
                 return child.enclosing(left, right)
         return self
 
+    @lru_cache(maxsize=None)
     def oracle_label(self, left, right):
         enclosing = self.enclosing(left, right)
         if enclosing.left == left and enclosing.right == right:
             return enclosing.label
-        return ()
+        return ()  # Leaf nodes
 
+    @lru_cache(maxsize=None)
     def oracle_splits(self, left, right):
         return [
             child.left
@@ -120,38 +139,18 @@ class InternalParseNode(ParseNode):
         ]
 
 
-class LeafParseNode(ParseNode):
-    def __init__(self, index, tag, word):
-        assert isinstance(index, int)
-        assert index >= 0
-        self.left = index
-        self.right = index + 1
-
-        assert isinstance(tag, str)
-        self.tag = tag
-
-        assert isinstance(word, str)
-        self.word = word
-
-    def leaves(self):
-        yield self
-
-    def convert(self):
-        return LeafTreebankNode(self.tag, self.word)
-
-
-def load_trees(path, strip_top=True):
-    with open(path) as infile:
-        tokens = infile.read().replace("(", " ( ").replace(")", " ) ").split()
+def load_trees(fn, strip_top=True):
+    with open(fn, "r", encoding="UTF-8") as f:
+        tokens = f.read().replace("(", " ( ").replace(")", " ) ").split()
 
     def helper(index):
         trees = []
 
         while index < len(tokens) and tokens[index] == "(":
-            paren_count = 0
+            parent_count = 0
             while tokens[index] == "(":
                 index += 1
-                paren_count += 1
+                parent_count += 1
 
             label = tokens[index]
             index += 1
@@ -164,10 +163,10 @@ def load_trees(path, strip_top=True):
                 index += 1
                 trees.append(LeafTreebankNode(label, word))
 
-            while paren_count > 0:
+            while parent_count > 0:
                 assert tokens[index] == ")"
                 index += 1
-                paren_count -= 1
+                parent_count -= 1
 
         return trees, index
 
