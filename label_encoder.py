@@ -7,18 +7,15 @@ class LabelEncoder(object):
         self.__values = {}
         self.__indices = {}
 
-    def fit(self, labels, reserved_labels=None, min_freq=1):
+    def fit(self, labels, reserved_labels=[], min_freq=1):
         assert not self.__indices, "This {} instance has already fitted.".format(
             __name__
         )
 
-        freq_table = Counter(labels)
+        sorted_freq_table = sorted(Counter(labels).items(), key=lambda v: (-v[1], v[0]))
 
-        sorted_freq_table = sorted(freq_table.items(), key=lambda v: (-v[1], v[0]))
-
-        if isinstance(reserved_labels, list):
-            for label in reserved_labels:
-                self.__values[len(self.__values)] = label
+        for label in reserved_labels:
+            self.__values[len(self.__values)] = label
 
         for k, v in sorted_freq_table:
             if v >= min_freq:
@@ -28,9 +25,7 @@ class LabelEncoder(object):
 
     def transform(self, label, unknown_label=None):
         assert self.__indices, "This {} instance is not fitted yet.".format(__name__)
-        if label in self.__indices:
-            return self.__indices[label]
-        return self.__indices[unknown_label]
+        return self.__indices.get(label, self.__indices[unknown_label])
 
     def inverse_transform(self, _id):
         assert self.__indices, "This {} instance is not fitted yet.".format(__name__)
