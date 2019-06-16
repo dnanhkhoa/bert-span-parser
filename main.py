@@ -99,9 +99,9 @@ def prepare_batch_input(indices, features, trees, sentences, tag_encoder, device
         _attention_mask += [0] * padding_size
         _tag += [tag_encoder.transform("[PAD]")] * (tags_padding_size - len(_tag))
 
-    _ids = torch.tensor(_ids, dtype=torch.long).to(device)
-    _attention_masks = torch.tensor(_attention_masks, dtype=torch.long).to(device)
-    _tags = torch.tensor(_tags, dtype=torch.long).to(device)
+    _ids = torch.tensor(_ids, dtype=torch.long, device=device)
+    _attention_masks = torch.tensor(_attention_masks, dtype=torch.long, device=device)
+    _tags = torch.tensor(_tags, dtype=torch.long, device=device)
 
     return _ids, _attention_masks, _tags, _sections, _trees, _sentences
 
@@ -169,7 +169,7 @@ def eval(
 @click.option("--preload", is_flag=True)
 @click.option("--freeze_bert", is_flag=True)
 def main(*_, **kwargs):
-    use_cuda = torch.cuda.is_available()
+    use_cuda = torch.cuda.is_available() and kwargs["device"] >= 0
     device = torch.device("cuda:" + str(kwargs["device"]) if use_cuda else "cpu")
 
     if use_cuda:
