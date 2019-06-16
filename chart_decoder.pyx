@@ -12,6 +12,8 @@ ORACLE_PRECOMPUTED_TABLE = {}
 
 @cython.boundscheck(False)
 def decode(int force_gold, int sentence_len, np.ndarray[DTYPE_t, ndim=3] label_scores, int is_training, gold_tree, label_encoder):
+    cdef DTYPE_t NEG_INF = -np.inf
+
     cdef np.ndarray[DTYPE_t, ndim=3] cloned_label_scores = label_scores.copy()
     cdef np.ndarray[DTYPE_t, ndim=2] value_chart = np.zeros((sentence_len + 1, sentence_len + 1), dtype=np.float32)
     cdef np.ndarray[int, ndim=2] split_idx_chart = np.zeros((sentence_len + 1, sentence_len + 1), dtype=np.int32)
@@ -84,7 +86,7 @@ def decode(int force_gold, int sentence_len, np.ndarray[DTYPE_t, ndim=3] label_s
                 best_split = oracle_split_chart[left, right]
             else:
                 best_split = left + 1
-                split_val = -np.inf
+                split_val = NEG_INF
                 for split_idx in range(left + 1, right):
                     max_split_val = value_chart[left, split_idx] + value_chart[split_idx, right]
                     if max_split_val > split_val:
