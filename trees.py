@@ -58,7 +58,7 @@ class InternalTreebankNode(TreebankNode):
             children.append(child.convert(index=index))
             index = children[-1].right
 
-        return InternalParseNode(sublabels, children)
+        return InternalParseNode(tuple(sublabels), children)
 
 
 class ParseNode:
