@@ -431,7 +431,7 @@ def main(*_, **kwargs):
                     device=device,
                 )
 
-                _, loss = model(
+                loss = model(
                     ids=ids,
                     attention_masks=attention_masks,
                     tags=tags,

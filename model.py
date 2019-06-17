@@ -96,8 +96,11 @@ class ChartParser(BertPreTrainedModel):
 
             embeddings = self.dropout(embeddings)
 
-        predicted_trees = []
-
         loss = torch.zeros((), requires_grad=True)
 
-        return predicted_trees, loss
+        # Is training
+        if gold_trees:
+
+            return loss
+
+        return [], loss
