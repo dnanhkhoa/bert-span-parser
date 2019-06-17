@@ -5,6 +5,8 @@ import random
 
 import click
 import neptune
+import numpy as np
+import regex
 import torch
 from loguru import logger
 from neptune.exceptions import NoExperimentContext
@@ -41,8 +43,16 @@ def create_dataloader(sentences, batch_size, tag_encoder, tokenizer, is_eval):
         tokens = []
         tags = []
         sections = []
-        for tag, token in sentence:
-            subtokens = tokenizer.tokenize(BERT_TOKEN_MAPPING.get(token, token))
+        for tag, phrase in sentence:
+            subtokens = []
+            for token in regex.split(
+                r"(?<=[^\W_])_(?=[^\W_])", phrase, flags=regex.FULLCASE
+            ):
+                for subtoken in tokenizer.tokenize(
+                    BERT_TOKEN_MAPPING.get(token, token)
+                ):
+                    subtokens.append(subtoken)
+
             tokens.extend(subtokens)
             tags.append(tag_encoder.transform(tag, unknown_label="[UNK]"))
             sections.append(len(subtokens))
@@ -152,11 +162,14 @@ def eval(
 @click.option("--test_file", required=True, type=click.Path())
 @click.option("--output_dir", required=True, type=click.Path())
 @click.option("--bert_model", required=True, type=click.Path())
+@click.option("--lstm_layers", default=2, show_default=True, type=click.INT)
+@click.option("--lstm_dim", default=250, show_default=True, type=click.INT)
 @click.option("--tag_embedding_dim", default=50, show_default=True, type=click.INT)
-@click.option("--dropout_prob", default=0.1, show_default=True, type=click.FLOAT)
+@click.option("--label_hidden_dim", default=250, show_default=True, type=click.INT)
+@click.option("--dropout_prob", default=0.4, show_default=True, type=click.FLOAT)
 @click.option("--batch_size", default=32, show_default=True, type=click.INT)
 @click.option("--num_epochs", default=20, show_default=True, type=click.INT)
-@click.option("--learning_rate", default=3e-5, show_default=True, type=click.FLOAT)
+@click.option("--learning_rate", default=5e-5, show_default=True, type=click.FLOAT)
 @click.option("--warmup_proportion", default=0.1, show_default=True, type=click.FLOAT)
 @click.option(
     "--gradient_accumulation_steps", default=1, show_default=True, type=click.INT
@@ -188,6 +201,7 @@ def main(*_, **kwargs):
     # For reproducibility
     os.environ["PYTHONHASHSEED"] = str(kwargs["seed"])
     random.seed(kwargs["seed"])
+    np.random.seed(kwargs["seed"])
     torch.manual_seed(kwargs["seed"])
     torch.cuda.manual_seed_all(kwargs["seed"])
     torch.backends.cudnn.deterministic = True
@@ -284,7 +298,10 @@ def main(*_, **kwargs):
         kwargs["bert_model"],
         tag_encoder=tag_encoder,
         label_encoder=label_encoder,
+        lstm_layers=kwargs["lstm_layers"],
+        lstm_dim=kwargs["lstm_dim"],
         tag_embedding_dim=kwargs["tag_embedding_dim"],
+        label_hidden_dim=kwargs["label_hidden_dim"],
         dropout_prob=kwargs["dropout_prob"],
     )
 
@@ -385,6 +402,7 @@ def main(*_, **kwargs):
 
                 torch.cuda.set_rng_state_all(params["torch_cuda_random_state_all"])
                 torch.set_rng_state(params["torch_random_state"])
+                np.random.set_state(params["np_random_state"])
                 random.setstate(params["random_state"])
 
                 global_steps = params["global_steps"]
@@ -413,7 +431,7 @@ def main(*_, **kwargs):
                     device=device,
                 )
 
-                _, losses = model(
+                _, loss = model(
                     ids=ids,
                     attention_masks=attention_masks,
                     tags=tags,
@@ -421,8 +439,6 @@ def main(*_, **kwargs):
                     sentences=sentences,
                     gold_trees=trees,
                 )
-
-                loss = torch.stack(losses).mean()
 
                 if kwargs["gradient_accumulation_steps"] > 1:
                     loss /= kwargs["gradient_accumulation_steps"]
@@ -485,6 +501,7 @@ def main(*_, **kwargs):
                         "global_steps": global_steps,
                         "fscore": best_dev_fscore,
                         "random_state": random.getstate(),
+                        "np_random_state": np.random.get_state(),
                         "torch_random_state": torch.get_rng_state(),
                         "torch_cuda_random_state_all": torch.cuda.get_rng_state_all(),
                         "optimizer": optimizer.state_dict(),
