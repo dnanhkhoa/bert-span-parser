@@ -37,6 +37,7 @@ class ChartParser(BertPreTrainedModel):
             input_size=tag_embedding_dim + config.hidden_size,
             hidden_size=lstm_dim,
             num_layers=lstm_layers,
+            batch_first=True,
             dropout=dropout_prob,
             bidirectional=True,
         )
@@ -71,13 +72,13 @@ class ChartParser(BertPreTrainedModel):
 
         tag_embeddings = self.tag_embeddings(tags)
 
-        # Loop over each sample in a mini-batch
-        for (
-            idx,
-            (_subtoken_embeddings, _tag_embeddings, section, sentence),
-        ) in enumerate(zip(subtoken_embeddings, tag_embeddings, sections, sentences)):
-            gold_tree = gold_trees and gold_trees[idx]
+        span_sections = []
+        span_embeddings = []
 
+        # Loop over each sample in a mini-batch
+        for _subtoken_embeddings, _tag_embeddings, section, sentence in zip(
+            subtoken_embeddings, tag_embeddings, sections, sentences
+        ):
             num_tokens = len(section)
             num_subtokens = sum(section)
 
@@ -92,9 +93,11 @@ class ChartParser(BertPreTrainedModel):
 
             token_embeddings = torch.cat(token_embeddings, dim=0)
 
-            embeddings = torch.cat([_tag_embeddings, token_embeddings], dim=-1)
+            token_embeddings = torch.cat([_tag_embeddings, token_embeddings], dim=-1)
 
-            embeddings = self.dropout(embeddings)
+            token_embeddings = self.dropout(token_embeddings)
+
+            lstm_embeddings, _ = self.lstm(token_embeddings.unsqueeze(dim=-1))
 
         loss = torch.zeros((), requires_grad=True)
 
