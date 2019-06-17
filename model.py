@@ -71,8 +71,6 @@ class ChartParser(BertPreTrainedModel):
 
         tag_embeddings = self.tag_embeddings(tags)
 
-        predicted_trees = []
-
         # Loop over each sample in a mini-batch
         for (
             idx,
@@ -97,6 +95,8 @@ class ChartParser(BertPreTrainedModel):
             embeddings = torch.cat([_tag_embeddings, token_embeddings], dim=-1)
 
             embeddings = self.dropout(embeddings)
+
+        predicted_trees = []
 
         loss = torch.zeros((), requires_grad=True)
 
