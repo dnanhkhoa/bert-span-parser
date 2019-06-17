@@ -1,9 +1,17 @@
 # -*- coding: utf-8 -*-
+import numpy as np
+import pyximport
 import torch
 from torch import nn
 
-from bert.modeling import ACT2FN, BertModel, BertPreTrainedModel
+from bert.modeling import ACT2FN, BertLayerNorm, BertModel, BertPreTrainedModel
 from trees import InternalParseNode, LeafParseNode
+
+pyximport.install(
+    build_dir="caches", setup_args={"include_dirs": np.get_include()}, language_level=3
+)
+
+import chart_decoder
 
 
 class ChartParser(BertPreTrainedModel):
@@ -20,10 +28,18 @@ class ChartParser(BertPreTrainedModel):
     ):
         super(ChartParser, self).__init__(config)
 
+        self.bert = BertModel(config)
+
         self.tag_encoder = tag_encoder
         self.label_encoder = label_encoder
 
-        self.bert = BertModel(config)
+        self.lstm = nn.LSTM(
+            input_size=tag_embedding_dim + config.hidden_size,
+            hidden_size=lstm_dim,
+            num_layers=lstm_layers,
+            dropout=dropout_prob,
+            bidirectional=True,
+        )
 
         self.tag_embeddings = nn.Embedding(
             num_embeddings=len(tag_encoder),
@@ -32,14 +48,16 @@ class ChartParser(BertPreTrainedModel):
         )
 
         self.hidden_dense = nn.Linear(
-            in_features=config.hidden_size + tag_embedding_dim, out_features=250
+            in_features=lstm_dim * 2, out_features=label_hidden_dim
+        )
+
+        self.label_classifier = nn.Linear(
+            in_features=label_hidden_dim,
+            out_features=len(label_encoder) - 1,  # Skip label ()
         )
 
         self.intermediate_act_fn = ACT2FN[config.hidden_act]
 
-        self.label_classifier = nn.Linear(
-            in_features=250, out_features=len(label_encoder) - 1  # Skip label ()
-        )
         self.dropout = nn.Dropout(dropout_prob)
 
         self.apply(self.init_bert_weights)
@@ -54,7 +72,6 @@ class ChartParser(BertPreTrainedModel):
         tag_embeddings = self.tag_embeddings(tags)
 
         predicted_trees = []
-        losses = []
 
         # Loop over each sample in a mini-batch
         for (
@@ -77,13 +94,10 @@ class ChartParser(BertPreTrainedModel):
 
             token_embeddings = torch.cat(token_embeddings, dim=0)
 
-            embeddings = torch.cat([token_embeddings, _tag_embeddings], dim=-1)
+            embeddings = torch.cat([_tag_embeddings, token_embeddings], dim=-1)
 
             embeddings = self.dropout(embeddings)
 
-            predicted_tree, loss = self.__parse(embeddings, sentence, gold_tree)
+        loss = torch.zeros((), requires_grad=True)
 
-            predicted_trees.append(predicted_tree)
-            losses.append(loss)
-
-        return predicted_trees, losses
+        return predicted_trees, loss
