@@ -84,7 +84,7 @@ class ChartParser(BertPreTrainedModel):
 
             # Remove paddings
             _tag_embeddings = _tag_embeddings.narrow(0, 0, num_tokens)
-            _subtoken_embeddings = _subtoken_embeddings.narrow(0, 0, num_subtokens)
+            _subtoken_embeddings = _subtoken_embeddings.narrow(0, 1, num_subtokens)
 
             # Merge subtoken embeddings to form a single token embedding
             token_embeddings = []
@@ -97,7 +97,14 @@ class ChartParser(BertPreTrainedModel):
 
             token_embeddings = self.dropout(token_embeddings)
 
-            lstm_embeddings, _ = self.lstm(token_embeddings.unsqueeze(dim=-1))
+            lstm_embeddings, _ = self.lstm(token_embeddings.unsqueeze(dim=0))
+
+            lstm_embeddings = lstm_embeddings.squeeze(dim=0)
+
+            # Generate spans
+            for length in range(1, len(sentence) + 1):
+                for left in range(0, len(sentence) + 1 - length):
+                    right = left + length
 
         loss = torch.zeros((), requires_grad=True)
 
