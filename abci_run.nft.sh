@@ -13,7 +13,7 @@ module load cuda/10.0/10.0.130
 module load cudnn/7.5/7.5.0
 module load nccl/2.4/2.4.2-1
 
-source ~/ds/bin/activate
+source ~/ml/bin/activate
 
 bash neptune_api.sh
 
