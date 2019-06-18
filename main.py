@@ -141,7 +141,7 @@ def eval(
         )
 
         with torch.no_grad():
-            predicted_trees, _ = model(
+            predicted_trees = model(
                 ids=ids,
                 attention_masks=attention_masks,
                 tags=tags,
