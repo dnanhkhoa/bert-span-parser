@@ -114,6 +114,8 @@ def decode(int force_gold, int sentence_len, int num_previous_indices, np.ndarra
     n = sentence_len
 
     cdef int num_tree_nodes = 2 * n - 1
+    cdef np.ndarray[int, ndim=1] included_i = np.empty(num_tree_nodes, dtype=np.int32)
+    cdef np.ndarray[int, ndim=1] included_j = np.empty(num_tree_nodes, dtype=np.int32)
     cdef np.ndarray[int, ndim=1] included_indices = np.empty(num_tree_nodes, dtype=np.int32)
     cdef np.ndarray[int, ndim=1] included_labels = np.empty(num_tree_nodes, dtype=np.int32)
 
@@ -131,6 +133,9 @@ def decode(int force_gold, int sentence_len, int num_previous_indices, np.ndarra
         j = stack_j[stack_idx]
 
         stack_idx -= 1  # Pop
+
+        included_i[idx] = i
+        included_j[idx] = j
 
         l = j - i
 
@@ -163,4 +168,4 @@ def decode(int force_gold, int sentence_len, int num_previous_indices, np.ndarra
     cdef DTYPE_t augmented_score = value_chart[0, n]
     cdef DTYPE_t augmented_amount = round(augmented_score - original_score)
 
-    return augmented_score, included_indices, included_labels, augmented_amount
+    return augmented_score, included_i, included_j, included_indices, included_labels, augmented_amount
