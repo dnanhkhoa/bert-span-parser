@@ -2,6 +2,7 @@ boto3
 click
 loguru
 neptune-client
+numpy
 psutil
 regex
 requests
