@@ -114,6 +114,7 @@ def decode(int force_gold, int sentence_len, int num_previous_indices, np.ndarra
     n = sentence_len
 
     cdef int num_tree_nodes = 2 * n - 1
+
     cdef np.ndarray[int, ndim=1] included_i = np.empty(num_tree_nodes, dtype=np.int32)
     cdef np.ndarray[int, ndim=1] included_j = np.empty(num_tree_nodes, dtype=np.int32)
     cdef np.ndarray[int, ndim=1] included_indices = np.empty(num_tree_nodes, dtype=np.int32)
