@@ -11,16 +11,16 @@ ORACLE_PRECOMPUTED_TABLE = {}
 
 
 @cython.boundscheck(False)
-def decode(int force_gold, int sentence_len, np.ndarray[DTYPE_t, ndim=3] label_scores, int is_training, gold_tree, label_encoder):
+def decode(int force_gold, int sentence_len, int num_previous_indices, np.ndarray[DTYPE_t, ndim=2] label_scores, int is_training, gold_tree, label_encoder):
     cdef DTYPE_t NEG_INF = -np.inf
 
-    cdef np.ndarray[DTYPE_t, ndim=3] cloned_label_scores = label_scores.copy()
+    cdef np.ndarray[DTYPE_t, ndim=2] cloned_label_scores = label_scores.copy()
     cdef np.ndarray[DTYPE_t, ndim=2] value_chart = np.zeros((sentence_len + 1, sentence_len + 1), dtype=np.float32)
     cdef np.ndarray[int, ndim=2] split_idx_chart = np.zeros((sentence_len + 1, sentence_len + 1), dtype=np.int32)
     cdef np.ndarray[int, ndim=2] best_label_chart = np.zeros((sentence_len + 1, sentence_len + 1), dtype=np.int32)
 
     cdef int label_index_iter
-    cdef int length, left, right
+    cdef int length, left, right, span_index
     cdef int oracle_label_index, argmax_label_index
     cdef int best_split, split_idx
 
@@ -48,29 +48,33 @@ def decode(int force_gold, int sentence_len, np.ndarray[DTYPE_t, ndim=3] label_s
 
             ORACLE_PRECOMPUTED_TABLE[gold_tree] = oracle_label_chart, oracle_split_chart
 
+    span_index = -1
+
     for length in range(1, sentence_len + 1):
         for left in range(0, sentence_len + 1 - length):
             right = left + length
+
+            span_index += 1
 
             if is_training or force_gold:
                 oracle_label_index = oracle_label_chart[left, right]
 
             if force_gold:
-                label_score = cloned_label_scores[left, right, oracle_label_index]
+                label_score = cloned_label_scores[span_index, oracle_label_index]
                 best_label_chart[left, right] = oracle_label_index
             else:
                 if is_training:
                     # Augment scores
-                    cloned_label_scores[left, right, oracle_label_index] -= 1
+                    cloned_label_scores[span_index, oracle_label_index] -= 1
 
                 argmax_label_index = int(length >= sentence_len)
 
                 # Compute argmax manually
-                label_score = cloned_label_scores[left, right, argmax_label_index]
-                for label_index_iter in range(1, cloned_label_scores.shape[2]):
-                    if cloned_label_scores[left, right, label_index_iter] > label_score:
+                label_score = cloned_label_scores[span_index, argmax_label_index]
+                for label_index_iter in range(1, cloned_label_scores.shape[1]):
+                    if cloned_label_scores[span_index, label_index_iter] > label_score:
                         argmax_label_index = label_index_iter
-                        label_score = cloned_label_scores[left, right, label_index_iter]
+                        label_score = cloned_label_scores[span_index, label_index_iter]
 
                 best_label_chart[left, right] = argmax_label_index
 
@@ -105,10 +109,13 @@ def decode(int force_gold, int sentence_len, np.ndarray[DTYPE_t, ndim=3] label_s
 
     Nodes = 2 * N - 1 (full binary tree)
     """
-    cdef int num_tree_nodes = 2 * sentence_len - 1
-    cdef np.ndarray[int, ndim=1] included_i = np.empty(num_tree_nodes, dtype=np.int32)
-    cdef np.ndarray[int, ndim=1] included_j = np.empty(num_tree_nodes, dtype=np.int32)
-    cdef np.ndarray[int, ndim=1] included_label = np.empty(num_tree_nodes, dtype=np.int32)
+    cdef int i, j, k, l, n
+
+    n = sentence_len
+
+    cdef int num_tree_nodes = 2 * n - 1
+    cdef np.ndarray[int, ndim=1] included_indices = np.empty(num_tree_nodes, dtype=np.int32)
+    cdef np.ndarray[int, ndim=1] included_labels = np.empty(num_tree_nodes, dtype=np.int32)
 
     cdef int idx = 0
     cdef int stack_idx = 1
@@ -117,9 +124,7 @@ def decode(int force_gold, int sentence_len, np.ndarray[DTYPE_t, ndim=3] label_s
     cdef np.ndarray[int, ndim=1] stack_j = np.empty(num_tree_nodes + 5, dtype=np.int32)
 
     stack_i[1] = 0
-    stack_j[1] = sentence_len
-
-    cdef int i, j, k
+    stack_j[1] = n
 
     while stack_idx > 0:
         i = stack_i[stack_idx]
@@ -127,9 +132,12 @@ def decode(int force_gold, int sentence_len, np.ndarray[DTYPE_t, ndim=3] label_s
 
         stack_idx -= 1  # Pop
 
-        included_i[idx] = i
-        included_j[idx] = j
-        included_label[idx] = best_label_chart[i, j]
+        l = j - i
+
+        included_indices[idx] = (n * (n + 1) - (n - l + 1) * (n - l + 2)) >> 1
+        included_indices[idx] += i
+
+        included_labels[idx] = best_label_chart[i, j]
 
         idx += 1
 
@@ -149,9 +157,10 @@ def decode(int force_gold, int sentence_len, np.ndarray[DTYPE_t, ndim=3] label_s
 
     cdef DTYPE_t original_score = 0.0
     for idx in range(num_tree_nodes):
-        original_score += label_scores[included_i[idx], included_j[idx], included_label[idx]]
+        original_score += label_scores[included_indices[idx], included_labels[idx]]
+        included_indices[idx] += num_previous_indices
 
-    cdef DTYPE_t augmented_score = value_chart[0, sentence_len]
+    cdef DTYPE_t augmented_score = value_chart[0, n]
     cdef DTYPE_t augmented_amount = round(augmented_score - original_score)
 
-    return augmented_score, included_i, included_j, included_label, augmented_amount
+    return augmented_score, included_indices, included_labels, augmented_amount

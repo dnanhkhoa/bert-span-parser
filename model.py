@@ -74,7 +74,7 @@ class ChartParser(BertPreTrainedModel):
 
         tag_embeddings = self.tag_embeddings(tags)
 
-        sentence_sections = []
+        sentence_sections = [0]
         span_embeddings = []
 
         # Loop over each sample in a mini-batch
@@ -133,6 +133,28 @@ class ChartParser(BertPreTrainedModel):
                 )
             )
         )
+
+        # Add score 0 for NULL label
+        label_scores = torch.cat(
+            (label_scores.new_zeros(label_scores.size(0), 1), label_scores), dim=-1
+        )
+
+        for sentence_idx, np_label_scores in enumerate(
+            np.split(label_scores.detach().cpu().numpy(), sentence_sections[1:-1])
+        ):
+            gold_tree = gold_trees and gold_trees[sentence_idx]
+
+            decoder_args = {
+                "sentence_len": len(sections[sentence_idx]),
+                "num_previous_indices": sentence_sections[sentence_idx],
+                "label_scores": np_label_scores,
+                "is_training": gold_tree is not None,
+                "gold_tree": gold_tree,
+                "label_encoder": self.label_encoder,
+            }
+
+            chart_decoder.decode(False, **decoder_args)
+            chart_decoder.decode(True, **decoder_args)
 
         loss = torch.zeros((), requires_grad=True)
 
