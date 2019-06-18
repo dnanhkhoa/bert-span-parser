@@ -83,11 +83,9 @@ class ChartParser(BertPreTrainedModel):
             num_subtokens = sum(section)
 
             # Remove paddings
-            _tag_embeddings = _tag_embeddings.narrow(
-                dimension=0, start=0, length=num_tokens
-            )
+            _tag_embeddings = _tag_embeddings.narrow(dim=0, start=0, length=num_tokens)
             _subtoken_embeddings = _subtoken_embeddings.narrow(
-                dimension=0, start=1, length=num_subtokens
+                dim=0, start=1, length=num_subtokens
             )
 
             # Merge subtoken embeddings to form a single token embedding
