@@ -143,7 +143,7 @@ class ChartParser(BertPreTrainedModel):
 
         total_augmented_amount = 0.0
 
-        all_predicted_trees = []
+        all_pred_trees = []
 
         all_pred_indices = []
         all_pred_labels = []
@@ -163,7 +163,7 @@ class ChartParser(BertPreTrainedModel):
                 "label_encoder": self.label_encoder,
             }
 
-            _, pred_included_indices, pred_included_labels, pred_augmented_amount = chart_decoder.decode(
+            _, pred_included_i, pred_included_j, pred_included_indices, pred_included_labels, pred_augmented_amount = chart_decoder.decode(
                 False, **decoder_args
             )
 
@@ -173,14 +173,46 @@ class ChartParser(BertPreTrainedModel):
             total_augmented_amount += pred_augmented_amount
 
             if is_training:
-                _, gold_included_indices, gold_included_labels, _ = chart_decoder.decode(
+                _, _, _, gold_included_indices, gold_included_labels, _ = chart_decoder.decode(
                     True, **decoder_args
                 )
 
                 all_gold_indices.append(gold_included_indices)
                 all_gold_labels.append(gold_included_labels)
             else:
-                pass
+                stack_idx = -1
+
+                def make_tree():
+                    nonlocal stack_idx
+                    stack_idx += 1
+
+                    pos_i, pos_j, label_index = (
+                        pred_included_i[stack_idx],
+                        pred_included_j[stack_idx],
+                        pred_included_labels[stack_idx],
+                    )
+
+                    pos_i = pos_i.item()
+                    pos_j = pos_j.item()
+
+                    label = self.label_encoder.inverse_transform(label_index)
+
+                    if (pos_i + 1) >= pos_j:
+                        tag, word = sentence[pos_i]
+                        tree = LeafParseNode(pos_i, tag, word)
+                        if label:
+                            tree = InternalParseNode(label, [tree])
+                        return [tree]
+                    else:
+                        left_trees = make_tree()
+                        right_trees = make_tree()
+                        children = left_trees + right_trees
+                        if label:
+                            return [InternalParseNode(label, children)]
+                        else:
+                            return children
+
+                all_pred_trees.append(make_tree()[0])
 
         # Is training
         if is_training:
@@ -198,4 +230,4 @@ class ChartParser(BertPreTrainedModel):
 
             return loss
 
-        return all_predicted_trees
+        return all_pred_trees
