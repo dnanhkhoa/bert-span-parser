@@ -66,6 +66,8 @@ class ChartParser(BertPreTrainedModel):
         self.apply(self.init_bert_weights)
 
     def forward(self, ids, attention_masks, tags, sections, sentences, gold_trees=None):
+        is_training = gold_trees is not None
+
         subtoken_embeddings, _ = self.bert(
             input_ids=ids,
             attention_mask=attention_masks,
@@ -139,28 +141,61 @@ class ChartParser(BertPreTrainedModel):
             (label_scores.new_zeros(label_scores.size(0), 1), label_scores), dim=-1
         )
 
+        total_augmented_amount = 0.0
+
+        all_predicted_trees = []
+
+        all_pred_indices = []
+        all_pred_labels = []
+
+        all_gold_indices = []
+        all_gold_labels = []
+
         for sentence_idx, np_label_scores in enumerate(
             np.split(label_scores.detach().cpu().numpy(), sentence_sections[1:-1])
         ):
-            gold_tree = gold_trees and gold_trees[sentence_idx]
-
             decoder_args = {
                 "sentence_len": len(sections[sentence_idx]),
                 "num_previous_indices": sentence_sections[sentence_idx],
                 "label_scores": np_label_scores,
-                "is_training": gold_tree is not None,
-                "gold_tree": gold_tree,
+                "is_training": is_training,
+                "gold_tree": gold_trees and gold_trees[sentence_idx],
                 "label_encoder": self.label_encoder,
             }
 
-            chart_decoder.decode(False, **decoder_args)
-            chart_decoder.decode(True, **decoder_args)
+            _, pred_included_indices, pred_included_labels, pred_augmented_amount = chart_decoder.decode(
+                False, **decoder_args
+            )
 
-        loss = torch.zeros((), requires_grad=True)
+            all_pred_indices.append(pred_included_indices)
+            all_pred_labels.append(pred_included_labels)
+
+            total_augmented_amount += pred_augmented_amount
+
+            if is_training:
+                _, gold_included_indices, gold_included_labels, _ = chart_decoder.decode(
+                    True, **decoder_args
+                )
+
+                all_gold_indices.append(gold_included_indices)
+                all_gold_labels.append(gold_included_labels)
+            else:
+                pass
 
         # Is training
-        if gold_trees:
+        if is_training:
+            all_pred_indices = ids.new_tensor(np.concatenate(all_pred_indices))
+            all_pred_labels = ids.new_tensor(np.concatenate(all_pred_labels))
+
+            all_gold_indices = ids.new_tensor(np.concatenate(all_gold_indices))
+            all_gold_labels = ids.new_tensor(np.concatenate(all_gold_labels))
+
+            loss = (
+                label_scores[all_pred_indices, all_pred_labels].sum()
+                - label_scores[all_gold_indices, all_gold_labels].sum()
+                + total_augmented_amount
+            )
 
             return loss
 
-        return [], loss
+        return all_predicted_trees
