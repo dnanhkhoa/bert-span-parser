@@ -2,6 +2,9 @@
 # Created by https://www.gitignore.io/api/linux,macos,python,windows,pycharm+all,visualstudiocode,jupyternotebooks
 # Edit at https://www.gitignore.io/?templates=linux,macos,python,windows,pycharm+all,visualstudiocode,jupyternotebooks
 
+# User-specific stuff
+.caches
+
 ### JupyterNotebooks ###
 # gitignore template for Jupyter Notebooks
 # website: http://jupyter.org/

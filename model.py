@@ -8,7 +8,7 @@ from bert.modeling import ACT2FN, BertLayerNorm, BertModel, BertPreTrainedModel
 from trees import InternalParseNode, LeafParseNode
 
 pyximport.install(
-    build_dir="caches", setup_args={"include_dirs": np.get_include()}, language_level=3
+    build_dir=".caches", setup_args={"include_dirs": np.get_include()}, language_level=3
 )
 
 import chart_decoder
