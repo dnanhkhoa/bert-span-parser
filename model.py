@@ -49,7 +49,7 @@ class ChartParser(BertPreTrainedModel):
         )
 
         self.hidden_dense = nn.Linear(
-            in_features=lstm_dim * 2, out_features=label_hidden_dim
+            in_features=3 * lstm_dim * 2, out_features=label_hidden_dim
         )
 
         self.label_classifier = nn.Linear(
@@ -58,6 +58,8 @@ class ChartParser(BertPreTrainedModel):
         )
 
         self.intermediate_act_fn = ACT2FN[config.hidden_act]
+
+        self.layer_norm = BertLayerNorm(label_hidden_dim, eps=config.layer_norm_eps)
 
         self.dropout = nn.Dropout(dropout_prob)
 
@@ -72,7 +74,7 @@ class ChartParser(BertPreTrainedModel):
 
         tag_embeddings = self.tag_embeddings(tags)
 
-        span_sections = []
+        sentence_sections = []
         span_embeddings = []
 
         # Loop over each sample in a mini-batch
@@ -107,6 +109,30 @@ class ChartParser(BertPreTrainedModel):
             for length in range(1, len(sentence) + 1):
                 for left in range(0, len(sentence) + 1 - length):
                     right = left + length
+
+                    left_embedding = lstm_embeddings[left]
+
+                    right_embedding = lstm_embeddings[right - 1]
+
+                    average_embedding = lstm_embeddings.narrow(
+                        dim=0, start=left, length=length
+                    ).mean(dim=0)
+
+                    span_embeddings.append(
+                        torch.cat([left_embedding, average_embedding, right_embedding])
+                    )
+
+            sentence_sections.append(len(span_embeddings))
+
+        span_embeddings = torch.stack(span_embeddings)
+
+        label_scores = self.label_classifier(
+            self.dropout(
+                self.layer_norm(
+                    self.intermediate_act_fn(self.hidden_dense(span_embeddings))
+                )
+            )
+        )
 
         loss = torch.zeros((), requires_grad=True)
 
