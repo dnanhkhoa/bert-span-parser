@@ -15,6 +15,6 @@ module load nccl/2.4/2.4.2-1
 
 source ~/ml/bin/activate
 
-bash neptune_api.sh
+source neptune_api.sh
 
-python -u main.py --train_file=corpora/WSJ-PTB/02-21.10way.clean.train --dev_file=corpora/WSJ-PTB/22.auto.clean.dev --test_file=corpora/WSJ-PTB/23.auto.clean.test --output_dir=outputs.nft --bert_model=models/bert-base-multilingual-cased --batch_size=32 --num_epochs=20 --learning_rate=3e-4 --freeze_bert > training.nft.log
+python -u main.py --train_file=corpora/WSJ-PTB/02-21.10way.clean.train --dev_file=corpora/WSJ-PTB/22.auto.clean.dev --test_file=corpora/WSJ-PTB/23.auto.clean.test --output_dir=outputs.nft --bert_model=models/bert-base-multilingual-cased --batch_size=48 --num_epochs=50 --learning_rate=3e-4 --freeze_bert > training.nft.log
