@@ -195,20 +195,20 @@ class ChartParser(BertPreTrainedModel):
                     pos_i = pos_i.item()
                     pos_j = pos_j.item()
 
-                    label = self.label_encoder.inverse_transform(label_index)
+                    pred_label = self.label_encoder.inverse_transform(label_index)
 
-                    if (pos_i + 1) >= pos_j:
-                        tag, word = sentence[pos_i]
+                    if pos_i + 1 >= pos_j:
+                        tag, word = sentences[sentence_idx][pos_i]
                         tree = LeafParseNode(pos_i, tag, word)
-                        if label:
-                            tree = InternalParseNode(label, [tree])
+                        if pred_label:
+                            tree = InternalParseNode(pred_label, [tree])
                         return [tree]
                     else:
                         left_trees = make_tree()
                         right_trees = make_tree()
                         children = left_trees + right_trees
-                        if label:
-                            return [InternalParseNode(label, children)]
+                        if pred_label:
+                            return [InternalParseNode(pred_label, children)]
                         else:
                             return children
 
