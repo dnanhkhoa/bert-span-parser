@@ -1,0 +1,11 @@
+boto3
+click
+cython
+loguru
+neptune-client
+numpy
+psutil
+regex
+requests
+torch
+tqdm
