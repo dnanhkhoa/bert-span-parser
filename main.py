@@ -400,8 +400,10 @@ def main(*_, **kwargs):
             if kwargs["resume"]:
                 optimizer.load_state_dict(params["optimizer"])
 
-                torch.cuda.set_rng_state_all(params["torch_cuda_random_state_all"])
-                torch.set_rng_state(params["torch_random_state"])
+                torch.cuda.set_rng_state_all(
+                    [state.cpu() for state in params["torch_cuda_random_state_all"]]
+                )
+                torch.set_rng_state(params["torch_random_state"].cpu())
                 np.random.set_state(params["np_random_state"])
                 random.setstate(params["random_state"])
 
