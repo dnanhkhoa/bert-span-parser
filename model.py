@@ -95,7 +95,32 @@ class ChartParser(BertPreTrainedModel):
             # Merge subtoken embeddings to form a single token embedding
             token_embeddings = []
             for _token_embeddings in _subtoken_embeddings.split(section, dim=0):
-                token_embeddings.append(_token_embeddings.mean(dim=0, keepdim=True))
+                # V0: Use mean of all subtoken embeddings as word embedding
+                # token_embeddings.append(_token_embeddings.mean(dim=0, keepdim=True))
+
+                # V1: Use the first subtoken embedding as word embedding
+                token_embeddings.append(
+                    _token_embeddings.narrow(dim=0, start=0, length=1)
+                )
+
+                # V2: Use the last subtoken embedding as word embedding
+                # token_embeddings.append(
+                #     _token_embeddings.narrow(dim=0, start=-1, length=1)
+                # )
+
+                # V3: Use the last subtoken embedding as word embedding
+                # token_embeddings.append(
+                #     _token_embeddings.narrow(dim=0, start=-1, length=1)
+                #     - _token_embeddings.narrow(dim=0, start=0, length=1)
+                # )
+
+                # V4: Use mean of the first and last subtoken embedding as word embedding
+                # token_embeddings.append(
+                #     (
+                #         _token_embeddings.narrow(dim=0, start=-1, length=1)
+                #         - _token_embeddings.narrow(dim=0, start=0, length=1)
+                #     ).mean(dim=0, keepdim=True)
+                # )
 
             token_embeddings = torch.cat(token_embeddings, dim=0)
 
