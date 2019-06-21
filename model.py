@@ -116,7 +116,7 @@ class ChartParser(BertPreTrainedModel):
 
                 # V4: Use mean of the first and last subtoken embedding as word embedding
                 # token_embeddings.append(
-                #     _token_embeddings[:: token_embeddings.size(0) - 1].mean(
+                #     _token_embeddings[:: _token_embeddings.size(0) - 1].mean(
                 #         dim=0, keepdim=True
                 #     )
                 # )
