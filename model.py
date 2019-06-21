@@ -2,6 +2,7 @@
 import numpy as np
 import pyximport
 import torch
+import torch.nn.functional as F
 from torch import nn
 
 from bert.modeling import ACT2FN, BertLayerNorm, BertModel, BertPreTrainedModel
@@ -12,6 +13,52 @@ pyximport.install(
 )
 
 import chart_decoder
+
+
+class Attention(nn.Module):
+    def __init__(self, config, embedding_dim, hidden_dim, dropout_prob):
+        super().__init__()
+
+        self.hidden_dense_1 = nn.Linear(
+            in_features=embedding_dim, out_features=hidden_dim
+        )
+
+        # self.hidden_dense_2 = nn.Linear(in_features=hidden_dim, out_features=hidden_dim)
+
+        self.score = nn.Linear(in_features=hidden_dim, out_features=1)
+
+        self.intermediate_act_fn = ACT2FN[config.hidden_act]
+
+        self.layer_norm = BertLayerNorm(hidden_dim, eps=config.layer_norm_eps)
+
+        self.dropout = nn.Dropout(dropout_prob)
+
+    def forward(self, embeddings):
+        # return self.score(
+        #     self.dropout(
+        #         self.layer_norm(
+        #             self.intermediate_act_fn(
+        #                 self.hidden_dense_2(
+        #                     self.dropout(
+        #                         self.layer_norm(
+        #                             self.intermediate_act_fn(
+        #                                 self.hidden_dense_1(embeddings)
+        #                             )
+        #                         )
+        #                     )
+        #                 )
+        #             )
+        #         )
+        #     )
+        # )
+
+        return self.score(
+            self.dropout(
+                self.layer_norm(
+                    self.intermediate_act_fn(self.hidden_dense_1(embeddings))
+                )
+            )
+        )
 
 
 class ChartParser(BertPreTrainedModel):
@@ -46,6 +93,13 @@ class ChartParser(BertPreTrainedModel):
             num_embeddings=len(tag_encoder),
             embedding_dim=tag_embedding_dim,
             padding_idx=tag_encoder.transform("[PAD]"),
+        )
+
+        self.attention = Attention(
+            config=config,
+            embedding_dim=lstm_dim * 2,
+            hidden_dim=150,
+            dropout_prob=dropout_prob,
         )
 
         self.hidden_dense = nn.Linear(
@@ -99,9 +153,9 @@ class ChartParser(BertPreTrainedModel):
                 # token_embeddings.append(_token_embeddings.mean(dim=0, keepdim=True))
 
                 # V1: Use the first subtoken embedding as word embedding
-                # token_embeddings.append(
-                #     _token_embeddings.narrow(dim=0, start=0, length=1)
-                # )
+                token_embeddings.append(
+                    _token_embeddings.narrow(dim=0, start=0, length=1)
+                )
 
                 # V2: Use the last subtoken embedding as word embedding
                 # token_embeddings.append(
@@ -109,19 +163,21 @@ class ChartParser(BertPreTrainedModel):
                 # )
 
                 # V3: Use difference between the last and first subtoken embedding as word embedding
+                # => Failed
                 # token_embeddings.append(
                 #     _token_embeddings.narrow(dim=0, start=-1, length=1)
                 #     - _token_embeddings.narrow(dim=0, start=0, length=1)
                 # )
 
                 # V4: Use mean of the first and last subtoken embedding as word embedding
-                token_embeddings.append(
-                    _token_embeddings[:: _token_embeddings.size(0) - 1].mean(
-                        dim=0, keepdim=True
-                    )
-                    if _token_embeddings.size(0) > 1
-                    else _token_embeddings.narrow(dim=0, start=0, length=1)
-                )
+                # token_embeddings.append(
+                #     torch.cat(
+                #         (
+                #             _token_embeddings.narrow(dim=0, start=0, length=1),
+                #             _token_embeddings.narrow(dim=0, start=-1, length=1),
+                #         )
+                #     ).mean(dim=0, keepdim=True)
+                # )
 
             token_embeddings = torch.cat(token_embeddings, dim=0)
 
@@ -142,12 +198,31 @@ class ChartParser(BertPreTrainedModel):
 
                     right_embedding = lstm_embeddings[right - 1]
 
-                    average_embedding = lstm_embeddings.narrow(
+                    # V0: unweighted average
+                    # average_embedding = lstm_embeddings.narrow(
+                    #     dim=0, start=left, length=length
+                    # ).mean(dim=0)
+
+                    # span_embeddings.append(
+                    #     torch.cat([left_embedding, average_embedding, right_embedding])
+                    # )
+
+                    # V1: Use attention as weighted average
+                    span_embedding = lstm_embeddings.narrow(
                         dim=0, start=left, length=length
-                    ).mean(dim=0)
+                    )
+                    attentions_weights = self.attention(span_embedding)
+
+                    attentions_weights = F.softmax(attentions_weights, dim=0)
+
+                    weighted_span_embedding = torch.mul(
+                        span_embedding, attentions_weights
+                    ).sum(dim=0)
 
                     span_embeddings.append(
-                        torch.cat([left_embedding, average_embedding, right_embedding])
+                        torch.cat(
+                            [left_embedding, weighted_span_embedding, right_embedding]
+                        )
                     )
 
             sentence_sections.append(len(span_embeddings))
