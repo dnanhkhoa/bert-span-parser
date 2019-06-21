@@ -109,17 +109,17 @@ class ChartParser(BertPreTrainedModel):
                 # )
 
                 # V3: Use difference between the last and first subtoken embedding as word embedding
-                token_embeddings.append(
-                    _token_embeddings.narrow(dim=0, start=-1, length=1)
-                    - _token_embeddings.narrow(dim=0, start=0, length=1)
-                )
+                # token_embeddings.append(
+                #     _token_embeddings.narrow(dim=0, start=-1, length=1)
+                #     - _token_embeddings.narrow(dim=0, start=0, length=1)
+                # )
 
                 # V4: Use mean of the first and last subtoken embedding as word embedding
-                # token_embeddings.append(
-                #     _token_embeddings[:: token_embeddings.size(0) - 1].mean(
-                #         dim=0, keepdim=True
-                #     )
-                # )
+                token_embeddings.append(
+                    _token_embeddings[:: token_embeddings.size(0) - 1].mean(
+                        dim=0, keepdim=True
+                    )
+                )
 
             token_embeddings = torch.cat(token_embeddings, dim=0)
 
