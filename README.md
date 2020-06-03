@@ -10,6 +10,7 @@ This repo is based on:
 
 ### Dataset
 
+#### Vietnamese
 Conducting experiments on the well-known and publicly available Vietnamese Treebank [corpus](https://link.springer.com/article/10.1007/s10579-015-9308-5?shared-article-renderer) from the VLSP project with bracketed structure format (similar to English Penn Treebank).
 
 Constructing train/valid/test sets with 18:1:1 ratio.
@@ -25,6 +26,8 @@ Constructing train/valid/test sets with 18:1:1 ratio.
 Where `T` is predicted tree (<img src="https://render.githubusercontent.com/render/math?math=T := ((i_t, j_t), l_t): 0 \leq t \leq |T|">, where <img src="https://render.githubusercontent.com/render/math?math=(i_t, j_t)"> is a span and <img src="https://render.githubusercontent.com/render/math?math=l_t"> is the corresponding label)  and `T*` is golden tree.
 
 ### Results
+
+#### Vietnamese Treebank
 
 | Model                       | F1 Dev | F1 Test                    |
 |-----------------------------|--------|----------------------------|
