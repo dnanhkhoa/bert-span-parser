@@ -31,5 +31,10 @@ Where `T` is predicted tree (<img src="https://render.githubusercontent.com/rend
 
 | Model                       | F1 Dev | F1 Test                    |
 |-----------------------------|--------|----------------------------|
-| Using BERT as feature       | 79.49  | 79.82 (R: 78.29; P: 81.41) |
-| Using BERT with fine-tuning | 80.95  | 81.29 (R: 80.47, P: 82.12) |
+| Shift-reduce parser (J.Coss & L.Huang, 2016) | 67.47 | 68.65 (R: 64.24, P: 73.70) |
+| Beam parser (J.Hong & L.Huang, 2018) | 75.02 | 74.84 (R: 75.47, P: 74.22) |
+| Minimal top-down parser (M.Stern et al., 2017) | 74.18 | 74.36 (R: 74.02, P: 74.70) |
+| Minimal chart parser (M.Stern et al., 2017) | 75.24 | 76.14 (R: 75.04, P: 77.27) |
+| Fasttext minimal parser (our test) | 75.35 | 76.30 (R: 76.45, P: 76.14) |
+| Using BERT as feature (our work)       | 79.49  | 79.82 (R: 78.29; P: 81.41) |
+| Using BERT with fine-tuning (our work) | 80.95  | 81.29 (R: 80.47, P: 82.12) |
