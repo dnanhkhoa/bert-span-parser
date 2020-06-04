@@ -36,8 +36,8 @@ Where `T` is predicted tree (<img src="https://render.githubusercontent.com/rend
 | Minimal top-down parser (M.Stern et al., 2017) [3]| 74.18 | 74.36 (R: 74.02, P: 74.70) |
 | Minimal chart parser (M.Stern et al., 2017) [3]| 75.24 | 76.14 (R: 75.04, P: 77.27) |
 | Fasttext minimal parser (our test) | 75.35 | 76.30 (R: 76.45, P: 76.14) |
-| Using BERT as feature (our work)       | 79.49  | 79.82 (R: 78.29; P: 81.41) |
-| Using BERT with fine-tuning (our work) | 80.95  | 81.29 (R: 80.47, P: 82.12) |
+| Using BERT as feature (our work)  [4]     | 79.49  | 79.82 (R: 78.29; P: 81.41) |
+| Using BERT with fine-tuning (our work) [4]| 80.95  | 81.29 (R: 80.47, P: 82.12) |
 
 #### References
 [1] James Cross & Liang Huang, Span-based constituency parsing with a structure-label system and provably optimal dynamic oracles, EMNLP, 2016.
@@ -46,4 +46,4 @@ Where `T` is predicted tree (<img src="https://render.githubusercontent.com/rend
 
 [3] Mitchell Stern, Jacob Andreas, Dan Klein, A minimal span-based neural constituency parser, In Proceedings of the Association for Computational Linguistics, 2017a.
 
-
+[4] Thi-Phuong-Uyen PHAN, Ngoc-Thanh-Tung HUYNH, Hung-Thinh TRUONG, Tuan-An DAO, Dien Dinh, Vietnamese Span-based Constituency Parsing with BERT Embedding, 2019, 1-7. 10.1109/KSE.2019.8919467. 
